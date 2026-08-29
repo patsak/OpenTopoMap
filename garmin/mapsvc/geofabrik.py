@@ -297,9 +297,10 @@ def _state_sidecar_path(pbf_path: Path) -> Path:
 
 
 def _write_pbf_date(pbf_path: Path, seq: int, timestamp: datetime) -> None:
+    ts = _format_geofabrik_ts(timestamp).replace(":", "\\:")
     _state_sidecar_path(pbf_path).write_text(
         f"sequenceNumber={seq}\n"
-        f"timestamp={_format_geofabrik_ts(timestamp).replace(':', '\\:')}\n",
+        f"timestamp={ts}\n",
         encoding="utf-8",
     )
     epoch = timestamp.timestamp()
