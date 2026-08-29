@@ -25,7 +25,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from mapsvc.bbox import parse_bbox
 from mapsvc.client import CLIENT_COOKIE, CLIENT_COOKIE_MAX_AGE, resolve_client_id
 from mapsvc.constants import JOBS_DIR, MAX_UPLOAD_BYTES
-from mapsvc.deps import require_deps
+from mapsvc.deps import download_deps, require_deps, sea_bounds_ready
 from mapsvc.job import JobStatus, job_download_filename, normalize_job_name
 from mapsvc.jobs import job_manager
 from mapsvc.osmfile import UploadError, normalize_upload_name, save_upload_stream
@@ -207,8 +207,10 @@ def health():
 
 def prepare() -> None:
     try:
-        deps = require_deps()
-    except RuntimeError as exc:
+        if not sea_bounds_ready():
+            log.info("First run: downloading sea/bounds into data/ (progress below)")
+        deps = download_deps(log=log.info)
+    except Exception as exc:  # noqa: BLE001
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
 
