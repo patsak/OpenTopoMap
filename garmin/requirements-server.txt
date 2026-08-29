@@ -1,0 +1,8 @@
+flask>=3.0
+gunicorn>=22.0
+shapely>=2.0
+pyhgtmap>=2.0
+npyosmium>=4.0
+numpy>=1.24
+scipy>=1.10
+huey>=2.5

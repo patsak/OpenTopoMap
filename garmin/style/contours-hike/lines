@@ -1,0 +1,29 @@
+# Sparse contours + ridge lines (хребтовка):
+# - resolutions 18–23: ridge lines (visible one step further in than before)
+# - resolution 23: elevation contours (10 m plain / 20 m mountain via pyhgtmap)
+#
+# NOTE: 23 is the most detailed level of this overlay (see options: levels = 0:23).
+# A rule with `resolution 24` here silently drops the element.
+#
+# Ridge ways come from tools/contours_to_ridges.py (OSM natural=ridge/arete).
+# Labels MUST use conv:m=>ft: Garmin contour types 0x20-0x22
+# store elevation in feet; the device converts to the user's units.
+# Glacier segments are tagged glacier=yes (blue 0x23–0x25).
+# Steep majors (slope > 50°) are tagged steep=yes and drawn thin.
+
+# --- хребтовка (mid zoom), OsmAnd-style: OSM natural=ridge/arete ---
+# Moraine crests are drawn with their own dotted symbol in the main map
+geological=moraine | natural=moraine {delete natural; delete contour}
+contour=ridge | natural=ridge | natural=arete {delete name} [0x10 resolution 18-23]
+
+# --- glacier contours (blue) ---
+contour=elevation & glacier=yes & steep=yes { name '${ele|conv:m=>ft}'; } [0x24 resolution 23]
+contour=elevation & glacier=yes & contour_ext=elevation_major { name '${ele|conv:m=>ft}'; } [0x25 resolution 23]
+contour=elevation & glacier=yes & contour_ext=elevation_medium { name '${ele|conv:m=>ft}'; } [0x24 resolution 23]
+contour=elevation & glacier=yes & contour_ext=elevation_minor [0x23 resolution 23]
+
+# --- land contours: no thick majors on slopes steeper than 50° ---
+contour=elevation & steep=yes { name '${ele|conv:m=>ft}'; } [0x21 resolution 23]
+contour=elevation & contour_ext=elevation_major { name '${ele|conv:m=>ft}'; } [0x22 resolution 23]
+contour=elevation & contour_ext=elevation_medium { name '${ele|conv:m=>ft}'; } [0x21 resolution 23]
+contour=elevation & contour_ext=elevation_minor [0x20 resolution 23]

@@ -1,0 +1,3 @@
+summary: OpenTopoMap Contours Hike
+version=2026-08-23
+description {Sparse contours + OSM ridge lines (хребтовка) for hiking maps.}

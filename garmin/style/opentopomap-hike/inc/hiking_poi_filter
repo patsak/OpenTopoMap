@@ -1,0 +1,53 @@
+# Hiking profile for Garmin GPSMAP 67 (240x400 screen).
+#
+# Urban POIs are dropped here, before the type rules below can match them, so
+# that villages along a route stay readable instead of turning into a cloud of
+# shop and restaurant icons. Deleting the tag is enough: later rules in this
+# file no longer see it, including the shop=* / sport=* catch-alls.
+#
+# Deliberately kept: water (spring, well, drinking_water), overnight (hut,
+# shelter, camp site), safety (hospital, police, fire station, pharmacy),
+# resupply (supermarket, convenience, outdoor gear), transport used to reach a
+# trailhead (parking, bus stop, station, border control) and orientation
+# landmarks (church, castle, tower, mast, viewpoint).
+
+# Food and nightlife
+amenity=restaurant | amenity=fast_food | amenity=food_court | amenity=cafe
+| amenity=bar | amenity=pub | amenity=biergarten | amenity=nightclub
+| amenity=casino | amenity=cinema | amenity=theatre | amenity=arts_centre
+| amenity=concert_hall | amenity=conference_centre | amenity=convention_center
+	{ delete amenity }
+
+# Money and vehicle services
+amenity=atm | amenity=bank | amenity=car_club | amenity=car_rental
+| amenity=car_sharing | amenity=car_wash | amenity=taxi | amenity=recycling
+	{ delete amenity }
+
+# Education and administration
+amenity=school | amenity=kindergarten | amenity=college | amenity=university
+| amenity=library | amenity=courthouse | amenity=prison
+| amenity=public_building | amenity=community_centre | amenity=community_center
+| amenity=nursing_home | amenity=embassy | amenity=townhall
+| amenity=post_office
+	{ delete amenity }
+
+# Shops: keep resupply and outdoor gear only
+shop=* & shop!=supermarket & shop!=convenience & shop!=general
+	& shop!=bakery & shop!=bakers & shop!=outdoor & shop!=sports
+	& shop!=hardware & shop!=doityourself & shop!=chemist
+	{ delete shop }
+
+# Urban leisure
+leisure=common | leisure=garden | leisure=golf_course | leisure=ice_rink
+| leisure=park | leisure=pitch | leisure=playground | leisure=recreation_ground
+| leisure=sports_center | leisure=sports_centre | leisure=stadium
+| leisure=track | leisure=water_park | leisure=marina
+	{ delete leisure }
+
+# Sport icons are always urban clutter on a topo map
+sport=* { delete sport }
+
+# City tourism (alpine huts, camp sites and viewpoints are kept)
+tourism=theme_park | tourism=zoo | tourism=aquarium | tourism=wine_cellar
+| tourism=hotel | tourism=motel
+	{ delete tourism }
