@@ -1,0 +1,17 @@
+
+#
+# Style options.
+#
+
+# The levels specification for this style
+# 
+# More levels may make zooming smoother, but it will generate larger map tiles.
+
+# mkgmap allows 8 levels at most. Resolution 23 is needed because the contours
+# overlay draws its elevation lines there, and crevasse hatching (cut out of the
+# same contour lines) has to appear at exactly that zoom. The former coarsest
+# level 15 was dropped to make room: it sat right next to 16 and the overview
+# map takes over from 14 anyway.
+levels = 0:24, 1:23, 2:22, 3:21, 4:20, 5:19, 6:18, 7:16
+overview-levels = 8:14, 9:11, 10:9
+

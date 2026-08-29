@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenTopoMap Garmin — bbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;650&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <strong>OpenTopoMap Garmin</strong>
+      <span class="muted">выделите область на карте и соберите .img</span>
+    </div>
+    <div class="actions">
+      <label class="basemap">
+        Подложка
+        <select id="basemap" aria-label="Подложка карты"></select>
+      </label>
+      <div id="queue-len" class="queue-len" title="Джобы, ожидающие сборки">Очередь: —</div>
+      <button type="button" id="btn-clear" class="btn ghost" disabled>Сбросить</button>
+      <button type="button" id="btn-cancel" class="btn danger" disabled>Отменить</button>
+      <button type="button" id="btn-build" class="btn primary" disabled>Собрать карту</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div id="map"></div>
+    <aside class="panel">
+      <h1>Область</h1>
+      <p class="hint">Нарисуйте прямоугольник инструментом на карте (каждая сторона — не больше 500 км) или загрузите .osm / .pbf до 200 МБ.</p>
+      <dl class="bbox" id="bbox-view">
+        <div><dt>West</dt><dd id="v-west">—</dd></div>
+        <div><dt>South</dt><dd id="v-south">—</dd></div>
+        <div><dt>East</dt><dd id="v-east">—</dd></div>
+        <div><dt>North</dt><dd id="v-north">—</dd></div>
+      </dl>
+      <label class="field">
+        Название карты
+        <input id="map-name" type="text" maxlength="80" placeholder="Эльбрус, Архыз…" autocomplete="off" />
+      </label>
+      <label class="field">
+        OSM / PBF файл
+        <input id="osm-file" type="file" accept=".pbf,.osm,.gz,.bz2,.xml,application/octet-stream" />
+      </label>
+      <p class="hint">Вместо bbox: .osm, .osm.pbf, .pbf (можно .gz / .bz2), максимум 200 МБ.</p>
+
+      <h2>Статус</h2>
+      <div id="status" class="status idle">Выберите bbox</div>
+      <pre id="log" class="log" hidden></pre>
+      <a id="download" class="btn primary download" hidden href="#">Скачать ZIP</a>
+
+      <h2>Последние карты</h2>
+      <input id="history-filter" class="field-input" type="search" placeholder="Поиск по названию" autocomplete="off" />
+      <p class="hint" id="history-empty">Пока нет сохранённых сборок.</p>
+      <ul id="history" class="history" hidden></ul>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

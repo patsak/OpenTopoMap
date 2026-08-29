@@ -1,0 +1,9 @@
+
+#
+# Style options for sparse mountain contours + ridge lines.
+# Resolutions 18–22 = хребтовка; 23 = elevation contours.
+#
+
+levels = 0:23, 1:22, 2:21, 3:20, 4:19, 5:18
+
+# no overview-levels: keep overview free of contour grid
