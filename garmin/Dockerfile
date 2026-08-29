@@ -58,15 +58,7 @@ RUN mkdir -p /app/tools \
        fi \
     && ln -sfn "$(find /app/tools -name splitter.jar | head -1)" /app/tools/splitter.jar \
     && test -f /app/tools/mkgmap.jar \
-    && test -e /app/tools/splitter.jar
-
-# Prefetch sea/bounds into the image; entrypoint copies them into the data volume if empty.
-RUN mkdir -p /opt/otm/seed \
-    && /opt/otm-venv/bin/python /app/download_deps.py \
-    && mv /app/data/sea /opt/otm/seed/sea \
-    && mv /app/data/bounds /opt/otm/seed/bounds \
-    && rm -rf /app/data \
-    && mkdir -p /app/data \
+    && test -e /app/tools/splitter.jar \
     && chmod +x /app/docker-entrypoint.sh
 
 ENV PATH="/opt/otm-venv/bin:${PATH}" \

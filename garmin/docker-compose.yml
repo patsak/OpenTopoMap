@@ -6,6 +6,7 @@
 # Готовый образ с master: ghcr.io/patsak/opentopomap-mapsvc:latest
 #
 # Кэш Geofabrik/DEM, SQLite-джобы, sea/bounds — в ./data
+# Первый запуск скачивает sea/bounds в ./data (прогресс в логах контейнера).
 
 services:
   mapsvc:
@@ -28,4 +29,4 @@ services:
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      start_period: 900s
