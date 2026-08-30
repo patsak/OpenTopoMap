@@ -252,11 +252,11 @@ def _outside_bbox(pbf: Path, area: str) -> bool:
 
 def _generate_contours(dem: str, out_dir: str, step: int, start_id: int, prefix: str) -> list[str]:
     """One pyhgtmap run; chdir keeps its relative output paths inside *out_dir*."""
-    from contextlib import chdir
-
     from pyhgtmap.main import main_internal
 
-    with chdir(out_dir):
+    prev = os.getcwd()
+    os.chdir(out_dir)
+    try:
         main_internal(
             [
                 f"--step={step}",
@@ -268,6 +268,8 @@ def _generate_contours(dem: str, out_dir: str, step: int, start_id: int, prefix:
                 dem,
             ]
         )
+    finally:
+        os.chdir(prev)
     return [str(p) for p in sorted(Path(out_dir).glob(f"{prefix}*.osm.pbf"))]
 
 
