@@ -51,7 +51,7 @@ Type=0x4d,4
 Type=0x52,4
 			;crevasse
 Type=0x54,5
-			;moraine (above glacier)
+			;cover moraine: scree stipple above glacier
 Type=0x46,4
 			;river
 Type=0x47,4
@@ -3016,40 +3016,43 @@ ExtendedLabels=Y
 FontStyle=SmallFont
 CustomColor=Day
 DaycustomColor:#5A3318
+; Cover moraine on ice: the same brown-dot stipple as scree (0x56). A separate
+; type is required because scree is draw-order 3 and would vanish under the
+; solid white glacier (order 4). This type is order 5, so the dots sit on ice.
 Xpm="32 32 2 1"
 "  c none"
 "0 c #5A3318"
-"00      00      00      00      "
-"00      00      00      00      "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"    00      00      00      00  "
-"    00      00      00      00  "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"00      00      00      00      "
-"00      00      00      00      "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"    00      00      00      00  "
-"    00      00      00      00  "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"00      00      00      00      "
-"00      00      00      00      "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"    00      00      00      00  "
-"    00      00      00      00  "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"00      00      00      00      "
-"00      00      00      00      "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
-"    00      00      00      00  "
-"    00      00      00      00  "
+"0   0   0   0   0   0   0   0   "
 "                                "
+"  0   0   0   0   0   0   0   0 "
 "                                "
 [end]
 

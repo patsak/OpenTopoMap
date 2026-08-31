@@ -1,0 +1,422 @@
+{
+ "alpine_hut": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 40,
+  "x": 96,
+  "y": 176
+ },
+ "barrier": {
+  "height": 28,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 472,
+  "y": 176
+ },
+ "bridge": {
+  "height": 20,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 816,
+  "y": 176
+ },
+ "bus_stop": {
+  "height": 36,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 392,
+  "y": 176
+ },
+ "camp_site": {
+  "height": 44,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 940,
+  "y": 108
+ },
+ "castle": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 32,
+  "x": 392,
+  "y": 0
+ },
+ "castle_ruins": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 32,
+  "x": 428,
+  "y": 0
+ },
+ "cave": {
+  "height": 24,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 608,
+  "y": 176
+ },
+ "church": {
+  "height": 80,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 64,
+  "y": 0
+ },
+ "cliff_point": {
+  "height": 20,
+  "pixelRatio": 2,
+  "width": 20,
+  "x": 856,
+  "y": 176
+ },
+ "communications_mast": {
+  "height": 48,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 736,
+  "y": 108
+ },
+ "communications_tower": {
+  "height": 80,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 104,
+  "y": 0
+ },
+ "convenience": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 464,
+  "y": 0
+ },
+ "cross": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 140,
+  "y": 176
+ },
+ "drinking_water": {
+  "height": 56,
+  "pixelRatio": 2,
+  "width": 52,
+  "x": 680,
+  "y": 108
+ },
+ "ford": {
+  "height": 12,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 936,
+  "y": 176
+ },
+ "glacier_point": {
+  "height": 20,
+  "pixelRatio": 2,
+  "width": 20,
+  "x": 880,
+  "y": 176
+ },
+ "hospital": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 40,
+  "x": 180,
+  "y": 176
+ },
+ "information": {
+  "height": 48,
+  "pixelRatio": 2,
+  "width": 32,
+  "x": 784,
+  "y": 108
+ },
+ "memorial": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 224,
+  "y": 176
+ },
+ "observation_tower": {
+  "height": 80,
+  "pixelRatio": 2,
+  "width": 76,
+  "x": 152,
+  "y": 0
+ },
+ "parking": {
+  "height": 44,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 0,
+  "y": 176
+ },
+ "pattern-bare-rock": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 532,
+  "y": 0
+ },
+ "pattern-cemetery": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 600,
+  "y": 0
+ },
+ "pattern-exclusion": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 668,
+  "y": 0
+ },
+ "pattern-farmland": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 736,
+  "y": 0
+ },
+ "pattern-forest": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 804,
+  "y": 0
+ },
+ "pattern-forest-conifer": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 872,
+  "y": 0
+ },
+ "pattern-forest-deciduous": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 940,
+  "y": 0
+ },
+ "pattern-meadow": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 0,
+  "y": 108
+ },
+ "pattern-moraine": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 68,
+  "y": 108
+ },
+ "pattern-orchard": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 136,
+  "y": 108
+ },
+ "pattern-quarry": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 204,
+  "y": 108
+ },
+ "pattern-sand": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 272,
+  "y": 108
+ },
+ "pattern-scree": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 340,
+  "y": 108
+ },
+ "pattern-scrub": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 408,
+  "y": 108
+ },
+ "pattern-vineyard": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 476,
+  "y": 108
+ },
+ "pattern-wetland": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 544,
+  "y": 108
+ },
+ "peak": {
+  "height": 24,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 640,
+  "y": 176
+ },
+ "pharmacy": {
+  "height": 48,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 820,
+  "y": 108
+ },
+ "saddle": {
+  "height": 22,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 784,
+  "y": 176
+ },
+ "shelter": {
+  "height": 38,
+  "pixelRatio": 2,
+  "width": 40,
+  "x": 348,
+  "y": 176
+ },
+ "sinkhole": {
+  "height": 24,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 672,
+  "y": 176
+ },
+ "spring": {
+  "height": 28,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 504,
+  "y": 176
+ },
+ "station": {
+  "height": 36,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 432,
+  "y": 176
+ },
+ "supermarket": {
+  "height": 64,
+  "pixelRatio": 2,
+  "width": 64,
+  "x": 612,
+  "y": 108
+ },
+ "survey_point": {
+  "height": 28,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 536,
+  "y": 176
+ },
+ "swimming": {
+  "height": 24,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 704,
+  "y": 176
+ },
+ "tower": {
+  "height": 72,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 312,
+  "y": 0
+ },
+ "tree_broadleaved": {
+  "height": 48,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 868,
+  "y": 108
+ },
+ "tree_needleleaved": {
+  "height": 48,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 908,
+  "y": 108
+ },
+ "viewpoint": {
+  "height": 80,
+  "pixelRatio": 2,
+  "width": 76,
+  "x": 232,
+  "y": 0
+ },
+ "volcano": {
+  "height": 24,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 752,
+  "y": 176
+ },
+ "water_tower": {
+  "height": 72,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 352,
+  "y": 0
+ },
+ "water_well": {
+  "height": 28,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 576,
+  "y": 176
+ },
+ "waterfall": {
+  "height": 20,
+  "pixelRatio": 2,
+  "width": 28,
+  "x": 904,
+  "y": 176
+ },
+ "watermill": {
+  "height": 44,
+  "pixelRatio": 2,
+  "width": 44,
+  "x": 48,
+  "y": 176
+ },
+ "wayside_cross": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 36,
+  "x": 264,
+  "y": 176
+ },
+ "wilderness_hut": {
+  "height": 40,
+  "pixelRatio": 2,
+  "width": 40,
+  "x": 304,
+  "y": 176
+ },
+ "wind_turbine": {
+  "height": 104,
+  "pixelRatio": 2,
+  "width": 60,
+  "x": 0,
+  "y": 0
+ }
+}

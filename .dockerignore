@@ -1,0 +1,25 @@
+# Build context: repository root (OpenTopoMap/)
+# See www/garminsvc/docker-compose.yml
+
+www/garminsvc/data/
+www/garminsvc/output/
+www/garminsvc/.venv/
+www/garminsvc/.venv-*/
+**/__pycache__/
+**/*.pyc
+**/.DS_Store
+**/*.img
+**/*.gmap/
+**/*.osm.pbf
+**/*.zip
+**/*.hgt
+www/garminsvc/tools/phyghtmap-*/
+www/garminsvc/tools/examples/
+www/garminsvc/tools/doc/
+.git/
+**/.venv/
+www/garminsvc/docker-compose.override.yml
+garmin/data/
+garmin/output/
+garmin/screenshots/
+garmin/www/

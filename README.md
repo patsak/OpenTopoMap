@@ -12,7 +12,9 @@ Please note, that the old raster tiles are depreciated. OpenTopoMap will switch 
 New vector tiles will be generated via tilemaker and are based on a modified shortbread scheme.
 
 ### Garmin
-Since summer 2014 there is a Garmin edition of the OpenTopoMap. They can be downloaded from http://garmin.opentopomap.org. The license of the Garmin maps is CC-BY-NC-SA and therefore reselling is not allowed. Here are some screenshots:
+Since summer 2014 there is a Garmin edition of the OpenTopoMap. They can be downloaded from http://garmin.opentopomap.org. The license of the Garmin maps is CC-BY-NC-SA and therefore reselling is not allowed. Manual build walkthrough: [garmin/README.md](garmin/README.md). The bbox build service lives in [www/garminsvc](www/garminsvc).
+
+Here are some screenshots:
 
 ![screenshot1](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot1.png)
 ![screenshot2](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot2.png)

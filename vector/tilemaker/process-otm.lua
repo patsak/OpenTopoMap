@@ -6,6 +6,12 @@
 -- Copyright (c) 2021, Geofabrik GmBH
 -- Licensed under FTWPL
 --
+-- Extends the Geofabrik schema with the data the Genshtab-style hiking
+-- cartography needs and that the plain schema drops: moraines, glacier parts,
+-- summit and pass elevations, rtsa_scale, hiking POIs and trails at earlier zoom
+-- levels. Those additions are marked "hike:".
+-- The cartography itself lives in maplibregljs/otm_layers.json; the reference
+-- for both is garmin/style/opentopomap-hike.
 
 
 -- Enter/exit Tilemaker
@@ -14,7 +20,11 @@ end
 function exit_function()
 end
 
-node_keys = { "place", "highway", "railway", "aeroway", "amenity", "aerialway", "shop", "leisure", "sport", "tourism", "man_made", "historic", "emergency", "office", "addr:housenumber", "addr:housename", "power" }
+-- hike: "natural" was missing, which silently dropped every peak, saddle, spring
+-- and cave node. "mountain_pass", "ford" and "geodesy" are the remaining keys the
+-- hiking POI rules match on their own.
+node_keys = { "place", "highway", "railway", "aeroway", "amenity", "aerialway", "shop", "leisure", "sport", "tourism", "man_made", "historic", "emergency", "office", "addr:housenumber", "addr:housename", "power",
+	"natural", "waterway", "mountain_pass", "ford", "geodesy" }
 
 -- Management of accepted key-value pairs for the "pois" layer.
 -- We write only whitelisted tags to the shape file.
@@ -77,6 +87,46 @@ poi_office_values = Set { "diplomatic" }
 poi_power_values = Set { "generator", "tower", "pole" }
 
 inf_zoom = 99
+
+-- hike: Urban POIs are dropped so that villages along a route stay readable.
+-- Mirrors garmin/style/opentopomap-hike/inc/hiking_poi_filter.
+hike_drop_amenity = Set { "restaurant", "fast_food", "food_court", "cafe", "bar", "pub",
+	"biergarten", "nightclub", "casino", "cinema", "theatre", "arts_centre", "concert_hall",
+	"conference_centre", "convention_center", "atm", "bank", "car_club", "car_rental",
+	"car_sharing", "car_wash", "taxi", "recycling", "school", "kindergarten", "college",
+	"university", "library", "courthouse", "prison", "public_building", "community_centre",
+	"community_center", "nursing_home", "embassy", "townhall", "post_office" }
+hike_keep_shop = Set { "supermarket", "convenience", "general", "bakery", "bakers", "outdoor",
+	"sports", "hardware", "doityourself", "chemist" }
+hike_drop_leisure = Set { "common", "garden", "golf_course", "ice_rink", "park", "pitch",
+	"playground", "recreation_ground", "sports_center", "sports_centre", "stadium", "track",
+	"water_park", "marina" }
+hike_drop_tourism = Set { "theme_park", "zoo", "aquarium", "wine_cellar", "hotel", "motel" }
+
+-- hike: cover moraine on ice (покровная морена). geological=moraine is the
+-- current tag, natural=moraine is deprecated. Wiki forbids natural=scree on a
+-- glacier (it clashes with natural=glacier), so the documented combination is
+-- natural=glacier + glacier:part=moraine + surface=scree.
+function isMoraine()
+	local geological = Find("geological")
+	local natural = Find("natural")
+	local glacier_part = Find("glacier:part")
+	if geological == "moraine" or natural == "moraine" or glacier_part == "moraine" then
+		return true
+	end
+	if Find("surface") == "scree" and (natural == "glacier" or glacier_part ~= "") then
+		return true
+	end
+	return false
+end
+
+-- hike: elevation is the whole point of a summit or a pass label.
+function addEleAttribute()
+	local ele = tonumber(Find("ele"))
+	if ele ~= nil then
+		AttributeNumeric("ele", ele)
+	end
+end
 
 function fillWithFallback(value1, value2, value3)
 	if value1 ~= "" then
@@ -366,6 +416,11 @@ function process_water_polygons(way_area)
 		if mz >= 10 then
 			mz = math.max(10, zmin_for_area(0.1, way_area))
 		end
+		-- hike: glaciers are primary content and must survive the size filter, the
+		-- same way the Garmin style forces resolution 15 for them.
+		if natural == "glacier" then
+			mz = math.min(mz, 8)
+		end
 		if landuse == "reservoir" or landuse == "basin" then
 			kind = landuse
 		elseif natural == "water" or natural == "glacier" then
@@ -495,21 +550,38 @@ function process_land()
 	local natural = Find("natural")
 	local wetland = Find("wetland")
 	local leisure = Find("leisure")
+	local leaf_type = Find("leaf_type")
 	local kind = ""
 	local mz = inf_zoom
 	if landuse == "forest" or natural == "wood" then
-		kind = "forest"
+		-- hike: the Genshtab style draws separate conifer and broad-leaved tree
+		-- symbols (Garmin types 0x38 / 0x39), so the leaf type has to reach the tile.
+		if leaf_type == "needleleaved" then
+			kind = "forest_conifer"
+		elseif leaf_type == "broadleaved" then
+			kind = "forest_deciduous"
+		else
+			kind = "forest"
+		end
 		mz = 7
 	elseif landuse == "residential" or landuse == "industrial" or landuse == "commercial" or landuse == "retail" or landuse == "railway" or landuse == "landfill" or landuse == "brownfield" or landuse == "greenfield" or landuse == "farmyard" or landuse == "farmland" then
 		kind = landuse
 		mz = 10
-	elseif landuse == "grass" or landuse == "meadow" or landuse == "orchard" or landuse == "vineyard" or landuse == "allotments" or landuse == "village_green" or landuse == "recreation_ground" or landuse == "greenhouse_horticulture" or landuse == "plant_nursery" or landuse == "quarry" then
+	elseif landuse == "meadow" or landuse == "grass" then
+		-- hike: meadow hatching starts one zoom earlier (Garmin resolution 18)
+		kind = landuse
+		mz = 10
+	elseif landuse == "orchard" or landuse == "vineyard" or landuse == "allotments" or landuse == "village_green" or landuse == "recreation_ground" or landuse == "greenhouse_horticulture" or landuse == "plant_nursery" or landuse == "quarry" then
 		kind = landuse
 		mz = 11
 	elseif natural == "sand" or natural == "beach" then
 		kind = natural
 		mz = 10
-	elseif natural == "wood" or natural == "heath" or natural == "scrub" or natural == "grassland" or natural == "bare_rock" or natural == "scree" or natural == "shingle" or natural == "sand" or natural == "beach" then
+	elseif natural == "grassland" then
+		-- hike: grassland is styled like meadow, so it appears at the same zoom
+		kind = natural
+		mz = 10
+	elseif natural == "wood" or natural == "heath" or natural == "scrub" or natural == "bare_rock" or natural == "scree" or natural == "shingle" or natural == "sand" or natural == "beach" then
 		kind = natural
 		mz = 11
 	elseif wetland == "swamp" or wetland == "bog" or wetland == "string_bog" or wetland == "wet_meadow" or wetland == "marsh" then
@@ -703,13 +775,24 @@ function process_streets()
 			mz = 11
 		elseif highway == "track" and (tracktype == "grade1" or tracktype == "") then
 			mz = 11
-		elseif highway == "track" and (tracktype == "grade2") then
+		elseif highway == "track" then
+			-- hike: tracks of any grade from z12 (Garmin resolution 20 instead of 22)
 			mz = 12
-		elseif highway == "track" and (tracktype ~= "" or tracktype ~= "grade1" or tracktype ~= "grade2") then
-			mz = 13
 		elseif highway == "service" then
 			mz = 12
-		elseif highway == "footway" or highway == "steps" or highway == "path" or highway == "cycleway" then
+		elseif highway == "path" or highway == "footway" then
+			-- hike: trails are the primary content of the map, so they appear two
+			-- zoom levels earlier than in the plain schema. A well-built path
+			-- (tracktype grade1/grade2) comes one level earlier still.
+			if tracktype == "grade1" or tracktype == "grade2" then
+				mz = 11
+			else
+				mz = 12
+			end
+		elseif highway == "cycleway" or highway == "bridleway" then
+			-- hike: bridleway had no MinZoom branch at all and was dropped silently
+			mz = 12
+		elseif highway == "steps" then
 			mz = 13
 		end
 	elseif (railway == "rail" or railway == "narrow_gauge") and service == "" then
@@ -733,7 +816,9 @@ function process_streets()
 		if surface == "unpaved" or surface == "compacted" or surface == "dirt" or surface == "earth" or surface == "fine_gravel" or surface == "grass" or surface == "grass_paver" or surface == "gravel" or surface == "ground" or surface == "mud" or surface == "pebblestone" or surface == "salt" or surface == "woodchips" or surface == "clay" then
 			surface = "unpaved"
 		elseif surface == "paved" or surface == "asphalt" or surface == "cobblestone" or surface == "cobblestone:flattended" or surface == "sett" or surface == "concrete" or surface == "concrete:lanes" or surface == "concrete:plates" or surface == "paving_stones" then
-			surface = "unpaved"
+			-- hike: the plain schema maps the paved group to "unpaved" as well, which
+			-- makes the attribute useless for telling a graded road from a dirt track.
+			surface = "paved"
 		else
 			surface = ""
 		end
@@ -1069,8 +1154,16 @@ function process_natural(poly_or_line)
 	local natural = valueAcceptedOrNil(natural_values, Find("natural"))
 	local man_made = valueAcceptedOrNil(man_made_values, Find("man_made"))
 	local barrier = valueAcceptedOrNil(barrier_values, Find("barrier"))
+	-- hike: moraine polygons carry the scree stipple over the glacier fill (same
+	-- brown dots as natural=scree, drawn after the white ice). Open moraine ways
+	-- carry the ridge symbol. The crest is often tagged highway=path as well; the
+	-- street layer keeps that copy, so both are drawn just like the Garmin continue rule.
+	local moraine = nil
+	if isMoraine() then
+		moraine = "moraine"
+	end
 	
-	if waterway == nil and natural == nil and man_made == nil and barrier == nil then
+	if waterway == nil and natural == nil and man_made == nil and barrier == nil and moraine == nil then
 		return false
 	end
 	
@@ -1081,12 +1174,22 @@ function process_natural(poly_or_line)
 	end
 	
 	mz = 12
+	-- hike: crevasses are the main obstacle on a glacier, so they are carried three
+	-- zooms earlier than the rest of this layer instead of appearing only on approach.
+	if natural == "crevasse" then
+		mz = 9
+	end
 	--Attribute("waterway", nilToEmptyStr(waterway))
 	--Attribute("natural", nilToEmptyStr(natural))
 	--Attribute("man_made", nilToEmptyStr(man_made))
 	--Attribute("barrier", nilToEmptyStr(barrier))
-	local type_str = waterway or natural or man_made or barrier
+	-- hike: moraine wins over a generic natural=* value so that a moraine tagged
+	-- surface=scree on a glacier is not lost.
+	local type_str = moraine or waterway or natural or man_made or barrier
 	Attribute("type",nilToEmptyStr(type_str))
+	if Holds("name") then
+		setNameAttributes()
+	end
 	
 	MinZoom(mz)
 	
@@ -1128,6 +1231,7 @@ function process_pois(polygon)
 	
 	local amenity = Find("amenity")
 	--local shop = Find("shop")
+	local shop = Find("shop")
 	local tourism = Find("tourism")
 	local man_made = Find("man_made")
 	local historic = Find("historic")
@@ -1156,6 +1260,29 @@ function process_pois(polygon)
 	
 	local is_church = { catholic = true, roman_catholic = true, old_catholic = true, greek_catholic = true, lutheran = true, protestant = true, reformed = true }
 	local is_chapel = { wayside_chapel = true, chapel = true, wayside_shrine = true, wayside_cross = true }
+	
+	-- hike: hiking POI filter, applied before the type rules below can match, so that
+	-- the shop=* / sport=* catch-alls no longer see urban clutter either.
+	if hike_drop_amenity[amenity] then
+		amenity = ""
+	end
+	if hike_drop_leisure[leisure] then
+		leisure = ""
+	end
+	if hike_drop_tourism[tourism] then
+		tourism = ""
+	end
+	if shop ~= "" and not hike_keep_shop[shop] then
+		shop = ""
+	end
+	sport = ""
+	
+	local mountain_pass = Find("mountain_pass")
+	local ford = Find("ford")
+	local waterway = Find("waterway")
+	local geodesy = Find("geodesy")
+	local summit_cross = Find("summit:cross")
+	local rtsa_scale = Find("rtsa_scale")
 	
 	if man_made == "communications_tower" then
 		type_tag = "communications_tower"
@@ -1224,12 +1351,41 @@ function process_pois(polygon)
 		type_tag = "watermill"
 		mz = 13
 	elseif (natural == "peak" or natural == "volcano") then		-- todo: update with Dominanz once available
-		if summit_cross == "yes" then
-			type_tag = "summit_cross"
+		-- hike: summit_cross was read from an undefined variable, so this branch never
+		-- fired. The Genshtab style has no separate cross symbol anyway, but the tag is
+		-- kept as an attribute for anyone who wants one.
+		if natural == "volcano" then
+			type_tag = "volcano"
 		else
 			type_tag = "peak"
 		end
 		mz = 12
+	-- hike: passes are the second most important label after summits. The Garmin
+	-- style prints "name rtsa_scale ele", e.g. "Бечо 1А 3375".
+	elseif natural == "saddle" or natural == "col" or natural == "notch" or mountain_pass == "yes" then
+		type_tag = "saddle"
+		mz = 12
+	elseif natural == "spring" then
+		type_tag = "spring"
+		mz = 13
+	elseif natural == "waterfall" or waterway == "waterfall" then
+		type_tag = "waterfall"
+		mz = 13
+	elseif man_made == "water_well" or man_made == "water_works" then
+		type_tag = "water_well"
+		mz = 14
+	elseif amenity == "drinking_water" then
+		type_tag = "drinking_water"
+		mz = 14
+	elseif man_made == "survey_point" or geodesy ~= "" then
+		type_tag = "survey_point"
+		mz = 14
+	elseif amenity == "shelter" or tourism == "lean_to" then
+		type_tag = "shelter"
+		mz = 12
+	elseif ford == "yes" or ford == "stepping_stones" then
+		type_tag = "ford"
+		mz = 13
 	elseif man_made == "cross" then
 		type_tag = "cross"
 		mz = 13
@@ -1278,6 +1434,15 @@ function process_pois(polygon)
 	Attribute("denotation", nilToEmptyStr(denotation)) -- debug
 	MinZoom(mz)
 	
+	-- hike: elevation and pass difficulty are part of the label, not decoration.
+	addEleAttribute()
+	if rtsa_scale ~= "" then
+		Attribute("rtsa_scale", rtsa_scale)
+	end
+	if summit_cross == "yes" then
+		AttributeBoolean("summit_cross", true)
+	end
+	
 	setNameAttributes()
 	setAddressAttributes()
 	return true
@@ -1301,13 +1466,18 @@ function way_function()
 	-- If closed ways are assumed to be rings by default except tagged with area=yes, type=multipolygon or type=boundary
 	local is_area_default_linear = area_yes_multi_boundary
 
+	-- hike: moraines are tagged with geological / glacier:part, which the original
+	-- guards did not look at, so those ways never reached process_natural().
+	local holds_natural_hike = (Holds("waterway") or Holds("natural") or Holds("landuse")
+		or Holds("barrier") or Holds("man_made") or Holds("geological") or Holds("glacier:part"))
+
 	-- Layers water_polygons, water_polygons_labels, dam_polygons
-	if is_area and (Holds("waterway") or Holds("natural") or Holds("landuse") or Holds("barrier") or Holds("man_made") or Holds("leisure")) then
+	if is_area and (holds_natural_hike or Holds("leisure")) then
 		process_water_polygons(area)
 		process_natural(true)
 	end
 	-- Layers water_lines, water_lines_labels, dam_lines
-	if not is_area and (Holds("waterway") or Holds("natural") or Holds("landuse") or Holds("barrier") or Holds("man_made")) then
+	if not is_area and holds_natural_hike then
 		process_water_lines()
 		process_natural(false)
 	end
@@ -1321,7 +1491,8 @@ function way_function()
 	--end
 
 	-- Layer bridges
-	if is_area and man_made == "bridge" then
+	-- hike: "man_made" was an undeclared global here, so the branch never matched.
+	if is_area and Find("man_made") == "bridge" then
 		process_bridges()
 	end
 

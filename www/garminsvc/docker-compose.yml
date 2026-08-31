@@ -1,0 +1,58 @@
+# OpenTopoMap Garmin map service
+#
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Готовый образ с master: ghcr.io/patsak/opentopomap-garminsvc:latest
+#
+# Стили и *_options лежат в ../../garmin/ (и пекутся в образ; ниже ещё
+# bind-mount для правок без пересборки).
+# Кэш Geofabrik/DEM, SQLite-джобы, sea/bounds — в ./data
+# Векторные тайлы подложки раздаёт Martin (сервис tiles), не Flask.
+
+services:
+  garminsvc:
+    build:
+      context: ../..
+      dockerfile: www/garminsvc/Dockerfile
+    image: ghcr.io/patsak/opentopomap-garminsvc:latest
+    working_dir: /app
+    ports:
+      - "${OTM_PORT:-8080}:8080"
+    environment:
+      OTM_HOST: "0.0.0.0"
+      OTM_PORT: "8080"
+      OTM_DOCKER: "1"
+      OTM_GARMIN_DIR: /garmin
+      OTM_VENV_PYTHON: /opt/otm-venv/bin/python
+      JAVA_MEM: ${JAVA_MEM:-4g}
+      # Browser talks to Martin on the published host port, not the docker network name.
+      OTM_MARTIN_PUBLIC_URL: "${OTM_MARTIN_PUBLIC_URL:-http://127.0.0.1:3000}"
+    volumes:
+      - ./data:/app/data
+      # Live style/options from the checkout (overrides the copy baked into the image).
+      - ../../garmin/style:/garmin/style:ro
+      - ../../garmin/opentopomap_hike_options:/garmin/opentopomap_hike_options:ro
+      - ../../garmin/contours_hike_options:/garmin/contours_hike_options:ro
+      # MapLibre-стиль векторной подложки: вне build-контекста сервиса.
+      - ../../vector/maplibregljs:/app/vector/maplibregljs:ro
+    depends_on:
+      - tiles
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 900s
+
+  tiles:
+    image: ghcr.io/maplibre/martin
+    # Each .mbtiles in data/vector-tiles becomes /{stem}/{z}/{x}/{y}.
+    # CORS is enabled by default, so the picker on :8080 can fetch from :3000.
+    command: ["/data"]
+    volumes:
+      - ./data/vector-tiles:/data:ro
+    ports:
+      - "${OTM_MARTIN_PORT:-3000}:3000"
+    restart: unless-stopped

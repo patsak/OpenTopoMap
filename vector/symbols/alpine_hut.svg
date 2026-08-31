@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <!-- Alpine hut: gabled house with overhanging eaves, the silhouette of the 9x9
+       bitmap of TYP type 0x661e. Kept just under the campsite tent, since a hut is
+       a landmark of the same rank. White body so it reads over forest and rock. -->
+  <path d="M10 2.5 L19 9 L16.5 9 L16.5 17.5 L3.5 17.5 L3.5 9 L1 9 Z"
+        fill="#FFFFFF" stroke="#000000" stroke-width="2"
+        stroke-linejoin="miter" stroke-linecap="square"/>
+</svg>
