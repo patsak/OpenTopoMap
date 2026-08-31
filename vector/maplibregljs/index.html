@@ -4,9 +4,10 @@
     <title>OpenTopoMap</title>
     <meta charset='utf-8'>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-	<script src='https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js'></script>
-	<link href='https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css' rel='stylesheet' />
-    <script src="maplibre-grid.js"></script>
+	<!-- Pinned to 5.x: maplibre-gl@latest currently resolves to 6.x, which no longer
+	     ships dist/maplibre-gl.js, and hillshade-method needs 5 or newer anyway. -->
+	<script src='https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js'></script>
+	<link href='https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css' rel='stylesheet' />
 
 	<script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
 		
@@ -20,7 +21,7 @@
 </head>
 <style>
     #map {
-        background: #000;
+        background: #F3E6C4;
     }
 </style>
   <style>
@@ -109,18 +110,6 @@
     
     <div class="row">
       <div>
-        <div class="label"><strong>Vector</strong></div>
-        <div style="font-size:12px;color:#475569;">Use vector or raster</div>
-      </div>
-      <div class="control">
-        <div id="vectorSwitch" class="switch" role="switch" aria-checked="false" tabindex="0">
-          <div class="knob"></div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="row">
-      <div>
         <div class="label"><strong>3D Globe</strong></div>
         <div style="font-size:12px;color:#475569;">3D Globe at low zoom levels</div>
       </div>
@@ -159,127 +148,25 @@
   </div>
 
 <script src="otm_layers.json"></script>
+<script src="otm_style.js"></script>
 <script>
-	var demSource = new mlcontour.DemSource({
-		url: "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp",
-		encoding: "terrarium",
-		maxzoom: 15,
-		worker: true, // offload isoline computation to a web worker to reduce jank
-		cacheSize: 100, // number of most-recent tiles to cache
-		timeoutMs: 10_000, // timeout on fetch requests
-	});
-	demSource.setupMaplibre(maplibregl);
-
     const map = new maplibregl.Map({
         container: 'map',
-        style: {
-            'version': 8,
-            'projection': {
-                'type': ['interpolate',['linear'],['zoom'],5,'vertical-perspective',7,'mercator']
-            },
-            'sources': {
-				'opentopomap-vector': {
-					'type': 'vector',
-					'lineMetrics': true,
-					'tiles': [
-						'https://opentopomap.org/otm/{z}/{x}/{y}.pbf'
-					],
-					'maxzoom': 14,
-					'attribution': 'Map style: © OpenTopoMap, Map data © OpenStreetMap contributors'
-				},
-				'dem': {
-					type: "raster-dem",
-					encoding: "terrarium",
-					tiles: [demSource.sharedDemProtocolUrl],
-					maxzoom: 15,
-					tileSize: 512,
-					'attribution': 'DEM: © mapterhorn.com'
-				},
-				/*'dem': {
-					'type': 'raster-dem',
-					'url': 'cog://https://opentopomap.org/vector/dem-srtm-cog.tif#dem',
-					'tileSize': 256,
-					'attribution': 'DEM: © Copernicus 🇪🇺'
-				},*/
-				'contour-source': {
-					type: "vector",
-					tiles: [
-						demSource.contourProtocolUrl({
-							multiplier: 1,
-							thresholds: { // zoom: [minor, major]
-								10: [50, 1000],
-								11: [20, 500],
-								12: [10, 100],
-								13: [10, 100],
-								14: [10, 100],
-								15: [10, 50],
-							},
-							contourLayer: "contours",
-							elevationKey: "ele",
-							levelKey: "level",
-							extent: 4096,
-							buffer: 1,
-						}),
-					],
-					maxzoom: 15,
-
-				},
-                'opentopomap-raster': {
-                    'type': 'raster',
-                    'tiles': [
-                        'https://tile.opentopomap.org/{z}/{x}/{y}.png'
-                    ],
-                    'tileSize': 256,
-                    'attribution':
-                        'Map tiles by <a target="_blank" href="https://opentopomap.org">OpenTopoMap</a>. Data &copy; <a href="https://www.openstreetmap.org/about" target="_blank">OpenStreetMap</a> contributors'
-                },
-                'openstreetmap-tiles': {
-                    'type': 'raster',
-                    'tiles': [
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-                    ],
-                    'tileSize': 256,
-                    'attribution':
-                        'Map tiles by <a target="_blank" href="https://opentopomap.org">OpenStreetMap</a>. Data &copy; <a href="https://www.openstreetmap.org/about" target="_blank">OpenStreetMap</a> contributors'
-                }
-            },
-            'glyphs': "https://fonts.undpgeohub.org/fonts/{fontstack}/{range}.pbf",
-            'sprite': "https://opentopomap.org/vector/otm_sprite",
-            'layers': otm_layers,
-            'sky': {
-                "sky-color": "#199EF3",
-				"sky-horizon-blend": 0.5,
-				"horizon-color": "#ffffff",
-				"horizon-fog-blend": 0,
-				"fog-color": "#0000ff",
-				"fog-ground-blend": 0,
-				"atmosphere-blend": ["interpolate",["linear"],["zoom"],0,1, 10,1,	12,0]
-            },
-            'light': {
-                'anchor': 'viewport',
-                'position': [3, 0, 30],
-                'color': '#AAAAAA'
-            }
-        },
-        center: [17.3, 47.6],
-        zoom: 5,
+        // Sources, contours and sprite come from otm_style.js, shared with the bbox
+        // picker of the Garmin service. Swap tiles/contours for a served tileset
+        // built by tools/build_contours.py to get the full Garmin contour behaviour.
+        style: otmVectorStyle({
+            tiles: 'https://opentopomap.org/otm/{z}/{x}/{y}.pbf',
+            maxzoom: 14,
+        }),
+        // Elbrus glaciers: moraines, crevasses, huts and passes in one view
+        center: [42.46, 43.32],
+        zoom: 13,
         hash: true
     });
     
     //map.setStyle("otm-vector");
 	
-    const grid = new MaplibreGrid.Grid({
-		  gridWidth: 10,
-		  gridHeight: 10,
-		  units: 'degrees',
-		  paint: {
-			'line-opacity': 0.2
-		  }
-	});
-	map.addControl(grid);
-    
-    //map.scrollZoom.setWheelZoomRate(1);
-
     map.addControl(new maplibregl.NavigationControl({visualizePitch:true, showZoom:true, showCompass:true}), 'top-left');
 	map.addControl(new maplibregl.GeolocateControl({positionOptions: {enableHighAccuracy: true},trackUserLocation: true}), 'top-left');
     
@@ -318,12 +205,11 @@
     const dialogCloseBtn = document.getElementById('dialogCloseBtn');
     const langSelect = document.getElementById('langSelect');
     const fullscreenSwitch = document.getElementById('fullscreenSwitch');
-    const vectorSwitch = document.getElementById('vectorSwitch');
     const globeSwitch = document.getElementById('globeSwitch');
     const terrainSwitch = document.getElementById('terrainSwitch');
     const tileboundarySwitch = document.getElementById('tileboundarySwitch');
     
-    const state = { lang:'nn', proj:null, fullscreenOn:false, vectorOn:true, globeOn:true, terrainOn:false, tileboundaryOn:false };
+    const state = { lang:'nn', proj:null, fullscreenOn:false, globeOn:true, terrainOn:false, tileboundaryOn:false };
     
     function setLangVisual(lang) {
 		const sel = document.getElementById('langSelect');
@@ -333,14 +219,13 @@
       if(on){ el.classList.add('on'); el.setAttribute('aria-checked','true'); } else { el.classList.remove('on'); el.setAttribute('aria-checked','false'); }
     }
     
-    [fullscreenSwitch, vectorSwitch, globeSwitch, terrainSwitch, tileboundarySwitch].forEach(s => {
+    [fullscreenSwitch, globeSwitch, terrainSwitch, tileboundarySwitch].forEach(s => {
       s.addEventListener('click', () => setSwitchVisual(s, s.getAttribute('aria-checked') !== 'true'));
       s.addEventListener('keydown', (e) => { if(e.key==='Enter' || e.key===' ') { e.preventDefault(); s.click(); }});
     });
     
     setLangVisual(state.lang);
     setSwitchVisual(fullscreenSwitch, state.fullscreenOn);
-    setSwitchVisual(vectorSwitch, state.vectorOn);
     setSwitchVisual(globeSwitch, state.globeOn);
     setSwitchVisual(terrainSwitch, state.terrainOn);
     setSwitchVisual(tileboundarySwitch, state.tileboundaryOn);
@@ -348,7 +233,6 @@
     dialogCloseBtn.addEventListener('click', () => settingsEl.classList.add('hidden'));
     langSelect.addEventListener('change', () => updateMapLanguage(langSelect.value));
     fullscreenSwitch.addEventListener('click', () => applyFullscreen(fullscreenSwitch.getAttribute('aria-checked') === 'true'));
-    vectorSwitch.addEventListener('click', () => applyVector(vectorSwitch.getAttribute('aria-checked') === 'true'));
     globeSwitch.addEventListener('click', () => applyGlobe(globeSwitch.getAttribute('aria-checked') === 'true'));
     terrainSwitch.addEventListener('click', () => applyTerrain(terrainSwitch.getAttribute('aria-checked') === 'true'));
     tileboundarySwitch.addEventListener('click', () => applyTileboundary(tileboundarySwitch.getAttribute('aria-checked') === 'true'));
@@ -361,30 +245,6 @@
         map.getContainer().requestFullscreen();
       } else if(!on && state.fullscreenOn){
         state.fullscreenOn = false;
-      }
-    }
-    
-    function applyVector(on){
-      if(on && !state.vectorOn){
-		const style = map.getStyle();
-		style.layers.forEach((layer) => {	
-			if (layer.id == "opentopomap-raster") {
-				map.setLayoutProperty(layer.id, 'visibility', 'none');
-			} else {
-				map.setLayoutProperty(layer.id, 'visibility', 'visible');
-			}
-		});	
-        state.vectorOn = true;
-      } else if(!on && state.globeOn){
-		const style = map.getStyle();
-		style.layers.forEach((layer) => {	
-			if (layer.id != "opentopomap-raster") {
-				map.setLayoutProperty(layer.id, 'visibility', 'none');
-			} else {
-				map.setLayoutProperty(layer.id, 'visibility', 'visible');
-			}
-		});	
-        state.vectorOn = false;
       }
     }
     

@@ -1,14 +1,16 @@
 landuse=basin|landuse=reservoir|natural=bay {set natural=water}
 
-# Moraines. geological=moraine is the current tag, natural=moraine is deprecated.
-# On-glacier moraines avoid natural=scree (it clashes with natural=glacier) and use
-# surface=scree or glacier:part=moraine instead.
+# Cover moraine on a glacier (покровная морена). Wiki forbids natural=scree on
+# ice because it clashes with natural=glacier; the combination is
+# natural=glacier + glacier:part=moraine + surface=scree, also geological=moraine
+# with surface=scree. Drawn as the scree stipple (0x54, same dots as 0x56) on
+# top of the white ice fill, as on a Genshtab sheet.
 (geological=moraine | natural=moraine | glacier:part=moraine |
  (surface=scree & (natural=glacier | glacier:part=*)))
 { add otm:moraine=yes }
 
-# A polygon that is both glacier and moraine keeps the white ice fill and gets
-# the moraine dots on top of it.
+# White ice first (continue), then the brown-dot overlay. 0x54 is draw-order 5
+# so the dots sit above glacier 0x4d (order 4); using 0x56 would hide them.
 natural=glacier & otm:moraine=yes { add mkgmap:skipSizeFilter=true } [0x4d resolution 15 continue]
 otm:moraine=yes [0x54 resolution 20]
 

@@ -1,7 +1,11 @@
 # Building a custom Garmin map - a complete walkthrough
 
-Based on the [HOWTO](HOWTO) this guide describes how to create a custom Garmin map.
+Based on the [HOWTO](HOWTO) this guide describes how to create a custom Garmin map
 using OpenTopoMap styles.
+
+The interactive bbox build service (formerly `garmin/mapsvc`) now lives in
+[`www/garminsvc`](../www/garminsvc). This directory keeps the manual walkthrough
+and screenshots.
 
 ## Required tools & OpenTopoMap repository
 

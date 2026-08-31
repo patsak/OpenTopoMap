@@ -13,12 +13,6 @@
             "simplify_ratio": 2,
             "combine_lines_below": 15
         },
-        "boundary_labels": {
-            "minzoom": 2,
-            "maxzoom": 14,
-            "source": "data/admin-points-4326/admin_points.shp",
-            "source_columns": true
-        },
         "addresses": {
             "minzoom": 14,
             "maxzoom": 14
@@ -79,8 +73,7 @@
         "streets": {
             "minzoom": 13,
             "maxzoom": 14,
-            "simplify_level": 0.00005,
-            "combine_lines_below": 14,
+            "simplify_level": 5e-05,
             "combine_lines_below": 14
         },
         "streets_med": {
@@ -142,26 +135,7 @@
             "simplify_below": 14,
             "simplify_level": 0.0001,
             "simplify_ratio": 2,
-			"filter_area": 0.7
-        },
-        "ocean": {
-            "minzoom": 8,
-            "maxzoom": 14,
-            "source": "data/water-polygons-split-4326/water_polygons.shp",
-            "source_columns": true,
-            "simplify_below": 14,
-            "simplify_level": 0.0001,
-            "simplify_ratio": 2
-        },
-        "ocean-low": {
-            "minzoom": 0,
-            "maxzoom": 7,
-            "source": "data/simplified-water-polygons-split-4326/simplified_water_polygons.shp",
-            "source_columns": true,
-            "simplify_below": 14,
-            "simplify_level": 0.0001,
-            "simplify_ratio": 2,
-            "write_to": "ocean"
+            "filter_area": 0.7
         },
         "water_polygons_labels": {
             "minzoom": 14,
@@ -207,9 +181,9 @@
         "basezoom": 14,
         "include_ids": false,
         "high_resolution": true,
-        "name": "OpenTopoMap",
+        "name": "OpenTopoMap (regional)",
         "version": "0.9",
-        "description": "OpenTopoMap (Genshtab-style) vector tiles",
+        "description": "OpenTopoMap vector tiles without shapefile ocean/admin layers",
         "compress": "gzip",
         "filemetadata": {
             "tilejson": "2.0.0",
@@ -221,8 +195,9 @@
             ]
         },
         "metadata": {
-          "author": "OpenStreetMap contributors, OpenTopoMap",
-          "license": "Open Database License 1.0"
-        }
+            "author": "OpenStreetMap contributors, OpenTopoMap",
+            "license": "Open Database License 1.0"
+        },
+        "filesettings": {}
     }
 }
