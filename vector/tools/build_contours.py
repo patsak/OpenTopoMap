@@ -4,8 +4,8 @@
 The client-side isolines (maplibre-contour over the DEM) cannot know where a
 contour crosses a glacier or how steep the slope is, so three parts of the
 Genshtab cartography are impossible with them: blue contours on ice, thinned
-major contours on slopes over 50 degrees, and the crevasse hatching that is cut
-out of the contour lines. All three already exist in the Garmin pipeline
+major contours on slopes over 50 degrees, and the crevasse hatching drawn
+perpendicular to glacier flow. All three already exist in the Garmin pipeline
 (www/garminsvc/garminsvc/contour_post.py and crevasse.py). This script converts that
 output into tiles the MapLibre style can consume instead.
 

@@ -216,24 +216,15 @@ def build_crevasse_stripes(ctx: BuildContext) -> None:
         log.warning("No source PBF for crevasse stripes — skipping")
         ctx.crevasse_osm = None
         return
-    if ctx.contours_dir is None:
-        log.warning("No contour dir for crevasse hatch — skipping")
-        ctx.crevasse_osm = None
-        return
-    contour_pbfs = first_glob(ctx.contours_dir, "*.osm.pbf")
-    if not contour_pbfs:
-        log.warning("No contour PBF for crevasse hatch — skipping")
-        ctx.crevasse_osm = None
-        return
     from garminsvc.crevasse import build_crevasse_stripes as _build
 
-    log.info("Crevasse hatch along DEM contours: %s", src)
+    log.info("Crevasse hatch perpendicular to glacier flow: %s", src)
     out = ctx.data_dir / "crevasse-stripes.osm"
-    ctx.crevasse_osm = _build(src, contour_pbfs, out)
+    ctx.crevasse_osm = _build(src, out)
     if ctx.crevasse_osm:
         log.info("Crevasse stripes: %s", ctx.crevasse_osm)
     else:
-        log.info("No crevasse stripes (no contour lines inside crevasse areas)")
+        log.info("No crevasse stripes (no crevasse inside a glacier with direction)")
 
 
 def _outside_bbox(pbf: Path, area: str) -> bool:

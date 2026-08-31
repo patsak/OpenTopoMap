@@ -1,48 +1,116 @@
-"""Crevasse hatch: short ticks along DEM contours, slightly askew."""
+"""Crevasse hatch: short ticks perpendicular to the host glacier's flow."""
 
 from __future__ import annotations
 
 import logging
 import math
 import random
+import re
 import xml.etree.ElementTree as ET
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-from shapely import wkb
+from shapely import STRtree, wkb
 from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
-from shapely.prepared import prep
+from shapely.validation import make_valid
 
 from npyosmium import FileProcessor
+from npyosmium.geom import WKBFactory
 
-from garminsvc.osm_areas import count_ways, load_area_mask, pbf_bbox
-from garminsvc.proc import check_cancelled, worker_count
-from garminsvc.progress import Progress
+from garminsvc.osm_areas import tagged_subset
 
 log = logging.getLogger(__name__)
 
-CANCEL_EVERY = 4000
+STRIPE_SPACING_M = 40.0
 MIN_STRIPE_M = 12.0
 MIN_TICK_KEEP_M = 6.0
 TICK_MIN_M = 10.0
 TICK_MAX_M = 50.0
 GAP_MIN_M = 10.0
 GAP_MAX_M = 50.0
-OFFSET_MAX_M = 20.0
-TICK_MAX_DEG = 20.0
+OFFSET_MAX_M = 12.0
+TICK_MAX_DEG = 8.0
+COVER_AREA_RATIO = 0.9
+OVERLAP_AREA_RATIO = 0.5
 M_PER_DEG_LAT = 111_320.0
-JOBS_ENV = "OTM_CREVASSE_JOBS"
+
+# Compass azimuth in degrees, 0 = north, clockwise (Wikipedia 4/8/16/32-wind).
+_CARDINAL_AZIMUTH: dict[str, float] = {
+    "N": 0,
+    "NORTH": 0,
+    "NBE": 11.25,
+    "NNE": 22.5,
+    "NORTHNORTHEAST": 22.5,
+    "NEBN": 33.75,
+    "NE": 45,
+    "NORTHEAST": 45,
+    "NEBE": 56.25,
+    "ENE": 67.5,
+    "EASTNORTHEAST": 67.5,
+    "EBN": 78.75,
+    "E": 90,
+    "EAST": 90,
+    "EBS": 101.25,
+    "ESE": 112.5,
+    "EASTSOUTHEAST": 112.5,
+    "SEBE": 123.75,
+    "SE": 135,
+    "SOUTHEAST": 135,
+    "SEBS": 146.25,
+    "SSE": 157.5,
+    "SOUTHSOUTHEAST": 157.5,
+    "SBE": 168.75,
+    "S": 180,
+    "SOUTH": 180,
+    "SBW": 191.25,
+    "SSW": 202.5,
+    "SOUTHSOUTHWEST": 202.5,
+    "SWBS": 213.75,
+    "SW": 225,
+    "SOUTHWEST": 225,
+    "SWBW": 236.25,
+    "WSW": 247.5,
+    "WESTSOUTHWEST": 247.5,
+    "WBS": 258.75,
+    "W": 270,
+    "WEST": 270,
+    "WBN": 281.25,
+    "WNW": 292.5,
+    "WESTNORTHWEST": 292.5,
+    "NWBW": 303.75,
+    "NW": 315,
+    "NORTHWEST": 315,
+    "NWBN": 326.25,
+    "NNW": 337.5,
+    "NORTHNORTHWEST": 337.5,
+    "NBW": 348.75,
+}
+
+_RANGE_RE = re.compile(
+    r"^\s*(-?\d+(?:\.\d+)?)\s*[-–/]\s*(-?\d+(?:\.\d+)?)\s*$",
+)
+_NUM_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*(?:°|deg)?\s*$", re.I)
 
 
-def _way_coords(w) -> list[tuple[float, float]] | None:
-    coords: list[tuple[float, float]] = []
-    for node in w.nodes:
-        if not node.location.valid():
-            return None
-        coords.append((node.location.lon, node.location.lat))
-    return coords
+def parse_direction(value: str | None) -> float | None:
+    """Return compass azimuth in degrees, or None if the tag cannot be parsed."""
+    if not value:
+        return None
+    raw = value.strip().split(";")[0].strip()
+    if not raw:
+        return None
+    compact = re.sub(r"[\s._-]+", "", raw.upper())
+    if compact in _CARDINAL_AZIMUTH:
+        return _CARDINAL_AZIMUTH[compact]
+    ranged = _RANGE_RE.match(raw.replace("°", ""))
+    if ranged:
+        a, b = float(ranged.group(1)), float(ranged.group(2))
+        return ((a + b) / 2.0) % 360.0
+    numbered = _NUM_RE.match(raw)
+    if numbered:
+        return float(numbered.group(1)) % 360.0
+    return None
 
 
 def _to_xy(lon: float, lat: float, lon0: float, lat0: float) -> tuple[float, float]:
@@ -77,13 +145,26 @@ def _line_parts(geom: BaseGeometry):
             yield from _line_parts(item)
 
 
-def _contour_rng(ele: float, line: LineString) -> random.Random:
+def _polygons(geom: BaseGeometry):
+    if geom.is_empty:
+        return
+    if geom.geom_type == "Polygon":
+        yield geom
+    elif geom.geom_type == "MultiPolygon":
+        yield from geom.geoms
+    elif geom.geom_type == "GeometryCollection":
+        for item in geom.geoms:
+            yield from _polygons(item)
+
+
+def _stripe_rng(azimuth: float, line: LineString, index: int) -> random.Random:
     x0, y0 = line.coords[0]
     seed = (
-        int(round(ele * 10))
-        ^ (int(round(x0 * 100)) * 1_000_003)
-        ^ (int(round(y0 * 100)) * 9_007_199)
-        ^ (int(round(line.length * 10)) * 97)
+        int(round(azimuth * 10))
+        ^ (index * 1_000_003)
+        ^ (int(round(x0 * 100)) * 9_007_199)
+        ^ (int(round(y0 * 100)) * 97)
+        ^ (int(round(line.length * 10)) * 13)
     )
     return random.Random(seed & 0xFFFFFFFF)
 
@@ -108,7 +189,7 @@ def _point_tangent(line: LineString, dist: float) -> tuple[float, float, float, 
 
 
 def _ticks(line: LineString, rng: random.Random) -> list[tuple[LineString, int]]:
-    """10–50 m ticks along the contour, skewed 0–20° and offset 0–20 m."""
+    """10–50 m ticks along the guide, skewed a few degrees and offset slightly."""
     if line.length < MIN_STRIPE_M:
         return []
     out: list[tuple[LineString, int]] = []
@@ -143,171 +224,153 @@ def _ticks(line: LineString, rng: random.Random) -> list[tuple[LineString, int]]
     return out
 
 
-def _bbox_hits(pbf: Path, mask: BaseGeometry) -> bool:
-    """True unless the file's header bbox is disjoint from *mask*."""
-    box = pbf_bbox(pbf)
-    if box is None:
-        return True
-    west, south, east, north = box
-    m_west, m_south, m_east, m_north = mask.bounds
-    return not (east < m_west or west > m_east or north < m_south or south > m_north)
-
-
-def _iter_contours(path: Path):
-    """Stream (line, ele) from a contour PBF instead of holding them all in memory."""
-    for obj in FileProcessor(str(path)).with_locations():
-        if not obj.is_way() or obj.tags.get("contour") != "elevation":
-            continue
-        coords = _way_coords(obj)
-        if coords is None or len(coords) < 2:
-            continue
-        try:
-            ele = float(obj.tags.get("ele") or 0)
-        except ValueError:
-            ele = 0.0
-        line = LineString(coords)
-        if line.is_empty or line.length <= 0:
-            continue
-        yield line, ele
-
-
-class _MaskCtx:
-    """Crevasse mask plus its projected twin; prepared geometry cannot be pickled,
-    so each process builds this from the mask WKB."""
-
-    def __init__(self, mask: BaseGeometry) -> None:
-        self.mask = mask
-        self.prepared = prep(mask)
-        self.lon0, self.lat0 = mask.centroid.x, mask.centroid.y
-        self.mask_xy = _project_geom(mask, self.lon0, self.lat0)
-
-
-def _hatch_one_file(
-    path: Path,
-    ctx: _MaskCtx,
-    progress: Progress | None,
-) -> tuple[int, int, list[tuple[LineString, int]]]:
-    lines: list[tuple[LineString, int]] = []
-    seen = 0
-    used = 0
-    for contour, ele in _iter_contours(path):
-        seen += 1
-        if progress is not None:
-            progress.advance()
-        if seen % CANCEL_EVERY == 0:
-            check_cancelled()
-        if not ctx.prepared.intersects(contour):
-            continue
-        clipped = contour.intersection(ctx.mask)
-        if clipped.is_empty:
-            continue
-        used += 1
+def _guides(local: BaseGeometry, flow_az: float) -> list[LineString]:
+    """Parallel lines across the projected polygon, perpendicular to glacier flow."""
+    minx, miny, maxx, maxy = local.bounds
+    span = math.hypot(maxx - minx, maxy - miny) + STRIPE_SPACING_M * 2
+    stripe_az = math.radians((flow_az + 90.0) % 360.0)
+    flow_az_r = math.radians(flow_az)
+    se, sn = math.sin(stripe_az), math.cos(stripe_az)
+    fe, fn = math.sin(flow_az_r), math.cos(flow_az_r)
+    cx, cy = (minx + maxx) / 2.0, (miny + maxy) / 2.0
+    n = int(span / STRIPE_SPACING_M) + 3
+    lines: list[LineString] = []
+    for i in range(-n, n + 1):
+        ox, oy = cx + fe * i * STRIPE_SPACING_M, cy + fn * i * STRIPE_SPACING_M
+        raw = LineString(
+            [
+                (ox - se * span, oy - sn * span),
+                (ox + se * span, oy + sn * span),
+            ]
+        )
+        clipped = raw.intersection(local)
         for part in _line_parts(clipped):
-            if not isinstance(part, LineString) or part.is_empty:
+            if isinstance(part, LineString) and part.length >= MIN_STRIPE_M:
+                lines.append(part)
+    return lines
+
+
+def _load_areas(pbf: Path, key: str, value: str) -> list[tuple[BaseGeometry, str | None]]:
+    subset = tagged_subset(pbf, key, value)
+    factory = WKBFactory()
+    out: list[tuple[BaseGeometry, str | None]] = []
+    failed = 0
+    try:
+        for obj in FileProcessor(str(subset)).with_areas().with_locations():
+            if not obj.is_area() or obj.tags.get(key) != value:
                 continue
-            local = _project_geom(part, ctx.lon0, ctx.lat0)
-            if not isinstance(local, LineString) or local.length < MIN_STRIPE_M:
+            try:
+                geom = wkb.loads(factory.create_multipolygon(obj), hex=True)
+            except (RuntimeError, ValueError, TypeError):
+                failed += 1
                 continue
-            rng = _contour_rng(ele, local)
-            for tick, width in _ticks(local, rng):
-                kept = tick.intersection(ctx.mask_xy)
+            if geom.is_empty:
+                continue
+            if not geom.is_valid:
+                geom = make_valid(geom)
+            if geom.is_empty:
+                continue
+            out.append((geom, obj.tags.get("direction")))
+    finally:
+        subset.unlink(missing_ok=True)
+    if failed:
+        log.warning("%s=%s: %s area(s) with broken geometry skipped", key, value, failed)
+    return out
+
+
+def _area_ratio(glacier: BaseGeometry, crevasse: BaseGeometry) -> float:
+    if crevasse.area <= 0:
+        return 0.0
+    inter = glacier.intersection(crevasse)
+    if inter.is_empty:
+        return 0.0
+    return inter.area / crevasse.area
+
+
+def _host_glacier(
+    crevasse: BaseGeometry,
+    glaciers: list[tuple[BaseGeometry, float]],
+    tree: STRtree,
+) -> float | None:
+    """Azimuth of the glacier that hosts *crevasse*, or None."""
+    found = tree.query(crevasse, predicate="intersects")
+    covering: list[tuple[BaseGeometry, float]] = []
+    overlapping: list[tuple[float, float]] = []
+    for i in found:
+        glacier, azimuth = glaciers[int(i)]
+        if glacier.covers(crevasse) or _area_ratio(glacier, crevasse) >= COVER_AREA_RATIO:
+            covering.append((glacier, azimuth))
+        else:
+            overlapping.append((_area_ratio(glacier, crevasse), azimuth))
+    if covering:
+        covering.sort(key=lambda item: item[0].area)
+        return covering[0][1]
+    if not overlapping:
+        return None
+    overlapping.sort(reverse=True)
+    ratio, azimuth = overlapping[0]
+    if ratio >= OVERLAP_AREA_RATIO:
+        return azimuth
+    return None
+
+
+def _hatch(crevasse: BaseGeometry, flow_az: float) -> list[tuple[LineString, int]]:
+    lines: list[tuple[LineString, int]] = []
+    for poly in _polygons(crevasse):
+        lon0, lat0 = poly.centroid.x, poly.centroid.y
+        local = _project_geom(poly, lon0, lat0)
+        if local.is_empty:
+            continue
+        for index, guide in enumerate(_guides(local, flow_az)):
+            rng = _stripe_rng(flow_az, guide, index)
+            for tick, width in _ticks(guide, rng):
+                kept = tick.intersection(local)
                 for piece in _line_parts(kept):
                     if not isinstance(piece, LineString) or piece.length < MIN_TICK_KEEP_M:
                         continue
-                    geo = _unproject_line(piece, ctx.lon0, ctx.lat0)
+                    geo = _unproject_line(piece, lon0, lat0)
                     if not geo.is_empty:
                         lines.append((geo, width))
-    return seen, used, lines
+    return lines
 
 
-_WORKER: dict[str, _MaskCtx] = {}
-
-
-def _init_hatch_worker(mask_wkb: bytes) -> None:
-    _WORKER["ctx"] = _MaskCtx(wkb.loads(mask_wkb))
-
-
-def _run_hatch_worker(path: str) -> tuple[int, int, list[tuple[bytes, int]]]:
-    seen, used, lines = _hatch_one_file(Path(path), _WORKER["ctx"], progress=None)
-    return seen, used, [(line.wkb, width) for line, width in lines]
-
-
-def _hatch_parallel(
-    relevant: list[Path],
-    mask: BaseGeometry,
-    jobs: int,
-) -> tuple[int, int, list[tuple[LineString, int]]]:
-    log.info("Crevasse hatch: %s files on %s workers", len(relevant), jobs)
-    # results are kept in file order so the output does not depend on completion order
-    per_file: list[list[tuple[LineString, int]]] = [[] for _ in relevant]
-    seen = 0
-    used = 0
-    pool = ProcessPoolExecutor(
-        max_workers=jobs,
-        initializer=_init_hatch_worker,
-        initargs=(mask.wkb,),
-    )
-    try:
-        pending = {pool.submit(_run_hatch_worker, str(p)): i for i, p in enumerate(relevant)}
-        done = 0
-        for future in as_completed(pending):
-            index = pending[future]
-            file_seen, file_used, blobs = future.result()
-            seen += file_seen
-            used += file_used
-            per_file[index] = [(wkb.loads(blob), width) for blob, width in blobs]
-            done += 1
-            log.info(
-                "Crevasse hatch %s/%s %s: %s ticks",
-                done,
-                len(relevant),
-                relevant[index].name,
-                len(per_file[index]),
-            )
-            check_cancelled()
-    except BaseException:
-        pool.shutdown(wait=False, cancel_futures=True)
-        raise
-    pool.shutdown()
-    return seen, used, [item for chunk in per_file for item in chunk]
-
-
-def extract_crevasse_stripes(pbf: Path, contour_pbfs: list[Path]) -> list[tuple[LineString, int]]:
-    mask = load_area_mask(pbf, "natural", "crevasse")
-    if mask is None:
+def extract_crevasse_stripes(pbf: Path) -> list[tuple[LineString, int]]:
+    crevasses = [geom for geom, _ in _load_areas(pbf, "natural", "crevasse")]
+    if not crevasses:
         log.info("Crevasse hatch: no natural=crevasse areas")
         return []
-    # crevasse areas are tiny; skip contour files that cannot touch them at all
-    relevant = [p for p in contour_pbfs if _bbox_hits(p, mask)]
-    if not relevant:
-        log.info("Crevasse hatch: no contour file overlaps the crevasse areas")
-        return []
-    if len(relevant) < len(contour_pbfs):
+    glaciers: list[tuple[BaseGeometry, float]] = []
+    skipped_no_dir = 0
+    for geom, raw_dir in _load_areas(pbf, "natural", "glacier"):
+        azimuth = parse_direction(raw_dir)
+        if azimuth is None:
+            skipped_no_dir += 1
+            continue
+        glaciers.append((geom, azimuth))
+    if not glaciers:
         log.info(
-            "Crevasse hatch: %s of %s contour files overlap crevasse areas",
-            len(relevant),
-            len(contour_pbfs),
+            "Crevasse hatch: no glacier with a usable direction tag (%s glaciers without one)",
+            skipped_no_dir,
         )
-
-    jobs = worker_count(len(relevant), JOBS_ENV)
-    if jobs > 1:
-        seen, used, lines = _hatch_parallel(relevant, mask, jobs)
-    else:
-        ctx = _MaskCtx(mask)
-        total = sum(count_ways(p, "contour", "elevation") for p in relevant)
-        progress = Progress("Crevasse hatch", total=total)
-        seen = used = 0
-        lines = []
-        for path in relevant:
-            file_seen, file_used, file_lines = _hatch_one_file(path, ctx, progress)
-            seen += file_seen
-            used += file_used
-            lines.extend(file_lines)
-        progress.finish(f"{used} contour ways hit, {len(lines)} ticks")
-    if seen == 0:
-        log.warning("Crevasse hatch: contour PBF has no elevation lines")
         return []
-    log.info("Crevasse hatch: %s contour ways hit, %s ticks", used, len(lines))
+
+    tree = STRtree([geom for geom, _ in glaciers])
+    lines: list[tuple[LineString, int]] = []
+    skipped_no_host = 0
+    for crevasse in crevasses:
+        azimuth = _host_glacier(crevasse, glaciers, tree)
+        if azimuth is None:
+            skipped_no_host += 1
+            continue
+        lines.extend(_hatch(crevasse, azimuth))
+    log.info(
+        "Crevasse hatch: %s glaciers, %s crevasse areas, %s ticks (no host: %s, glacier without direction: %s)",
+        len(glaciers),
+        len(crevasses),
+        len(lines),
+        skipped_no_host,
+        skipped_no_dir,
+    )
     return lines
 
 
@@ -338,8 +401,8 @@ def write_crevasse_osm(path: Path, lines: list[tuple[LineString, int]]) -> None:
     tree.write(path, encoding="UTF-8", xml_declaration=True)
 
 
-def build_crevasse_stripes(pbf: Path, contour_pbfs: list[Path], output: Path) -> Path | None:
-    lines = extract_crevasse_stripes(pbf, contour_pbfs)
+def build_crevasse_stripes(pbf: Path, output: Path) -> Path | None:
+    lines = extract_crevasse_stripes(pbf)
     if not lines:
         output.unlink(missing_ok=True)
         return None

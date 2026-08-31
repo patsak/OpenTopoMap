@@ -217,8 +217,8 @@ boundary=national [0x1e resolution 17]
 boundary=political [0x1c resolution 19]
 
 natural=cliff [0x31 resolution 21]
-# Crevasses appear exactly at the zoom where the contours overlay shows its
-# elevation lines (resolution 23), since the hatching is cut out of those lines
+# Crevasse ticks are drawn perpendicular to the host glacier's direction tag;
+# they share resolution 23 with the contours overlay so both appear together.
 crevasse=stripe2 [0x35 resolution 23]
 crevasse=stripe [0x34 resolution 23]
 natural=crevasse & is_closed()=false [0x34 resolution 23]

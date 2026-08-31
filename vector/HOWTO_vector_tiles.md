@@ -121,14 +121,20 @@ docker run --rm -v "$PWD":/data -w /data ghcr.io/systemed/tilemaker:master \
 #### 2.3. Серверные горизонтали и трещины
 
 Клиентские изолинии не знают ледник и крутизну. Полное garmin-поведение —
-те же три шага, что внутри garminsvc: pyhgtmap → `contour_post` → `crevasse`,
+`pyhgtmap` → `contour_post` для горизонталей и отдельно `crevasse` для трещин,
 затем `build_contours.py`.
 
-DEM — тайлы SRTM `.hgt` в `www/garminsvc/data/dem-cache/hgt/`. Их качает сам
-garminsvc при сборке bbox; для ручного прогона Эльбруса достаточно одного
-градуса `N43E042` (Эльбрус ≈ 43.35°N, 42.44°E). Можно положить готовый файл
-или один раз собрать маленькую карту через UI garminsvc вокруг Приэльбрусья —
-HGT останутся в кэше.
+Трещины больше не режутся из DEM-горизонталей: для каждой площадной
+`natural=crevasse` берётся хост-ледник (`natural=glacier`, который её покрывает)
+и штрихи кладутся **перпендикулярно** его тегу `direction` (кардинальные
+румбы или градусы). DEM для объектов карты не нужен.
+
+Горизонтали по-прежнему из DEM — тайлы SRTM `.hgt` в
+`www/garminsvc/data/dem-cache/hgt/`. Их качает сам garminsvc при сборке bbox;
+для ручного прогона Эльбруса достаточно одного градуса `N43E042`
+(Эльбрус ≈ 43.35°N, 42.44°E). Можно положить готовый файл или один раз
+собрать маленькую карту через UI garminsvc вокруг Приэльбрусья — HGT останутся
+в кэше.
 
 Минимум для проверки ледников (один градус):
 
@@ -169,7 +175,7 @@ finally:
 
 pbfs = sorted(out.glob(f'contours-{hgt.stem}*.osm.pbf'))
 postprocess_contour_pbfs(pbfs, pbf, [hgt])   # glacier=yes, steep=yes
-build_crevasse_stripes(pbf, pbfs, out / 'crevasse-stripes.osm')
+build_crevasse_stripes(pbf, out / 'crevasse-stripes.osm')  # glacier direction, no DEM
 print('contours:', len(pbfs), 'files in', out)
 PY
 ```
@@ -179,7 +185,8 @@ PY
 с разными `--start-node-id` / `--start-way-id` на каждый тайл — как делает
 `garminsvc.pipeline.build_contour_pbfs` (шаг id 1.5M на тайл). Проще всего
 собрать bbox всего округа через UI garminsvc и забрать уже готовые
-`data/jobs/<id>/build/data/contours-hike/*.osm.pbf` и `crevasse-stripes.osm`.
+`data/jobs/<id>/build/data/contours-hike/*.osm.pbf` и
+`data/jobs/<id>/build/data/crevasse-stripes.osm`.
 
 Собрать mbtiles из tagged-контуров:
 

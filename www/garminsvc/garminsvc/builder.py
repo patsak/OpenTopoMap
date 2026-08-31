@@ -180,8 +180,8 @@ class MapBuilder:
         prepare_pbf_tiles(ctx)
         compile_typ(ctx)
         build_ridges(ctx)
-        build_contour_pbfs(ctx)
         build_crevasse_stripes(ctx)
+        build_contour_pbfs(ctx)
         build_main_map(ctx)
         build_contours_map(ctx)
 

@@ -371,8 +371,8 @@ const otm_layers = [
 	}
 },
 {
-	// Hatching cut out of the contour lines by www/garminsvc/garminsvc/crevasse.py. Only
-	// present when the served contour tileset from tools/build_contours.py is used.
+	// Hatching perpendicular to glacier flow from www/garminsvc/garminsvc/crevasse.py.
+	// Only present when the served contour tileset from tools/build_contours.py is used.
 	"id": "crevasse-stripes",
 	"source": "contour-source",
 	"source-layer": "crevasses",
