@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.jobaide import job
 from garminsvc.job import JobStatus
 from garminsvc.retention import MAX_STORED_JOBS, cleanup_work_dir, jobs_to_keep
+from garminsvc.tests.jobaide import job
 
 
 class TestJobsToKeep(unittest.TestCase):

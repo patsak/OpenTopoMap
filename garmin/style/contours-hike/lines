@@ -5,7 +5,7 @@
 # NOTE: 23 is the most detailed level of this overlay (see options: levels = 0:23).
 # A rule with `resolution 24` here silently drops the element.
 #
-# Ridge ways come from tools/contours_to_ridges.py (OSM natural=ridge/arete).
+# Ridge ways come from otmlib.ridges (OSM natural=ridge/arete).
 # Labels MUST use conv:m=>ft: Garmin contour types 0x20-0x22
 # store elevation in feet; the device converts to the user's units.
 # Glacier segments are tagged glacier=yes (blue 0x23–0x25).

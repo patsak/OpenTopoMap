@@ -4,7 +4,13 @@
 Prerequisites (install separately, service will refuse to start without them):
 
   pip install -r requirements-server.txt
-  python download_deps.py
+  python -m garminsvc.download_deps
+
+Nothing is downloaded from here. Preparing the jars and the sea/bounds data is a
+step of its own — `garminsvc.fetchdeps` and `garminsvc.fetchdata`, run by the
+Dockerfile and the `garminsvc-init` compose service respectively — so a first
+boot cannot spend a quarter of an hour inside gunicorn's app factory before the
+process answers anything.
 """
 
 from __future__ import annotations
@@ -17,20 +23,24 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+# One level up holds both packages: /app in Docker, www/ in a checkout. Needed
+# when this file is run directly (`python server.py`) rather than imported as
+# `garminsvc.server`.
+sys.path.insert(0, str(ROOT.parent))
 
 from flask import Flask, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from garminsvc.bbox import parse_bbox
 from garminsvc.client import CLIENT_COOKIE, CLIENT_COOKIE_MAX_AGE, resolve_client_id
-from garminsvc.constants import JOBS_DIR, MAX_UPLOAD_BYTES
-from garminsvc.deps import download_deps, require_deps, sea_bounds_ready
+from garminsvc.constants import GEOFABRIK_CACHE, JOBS_DIR, MAX_UPLOAD_BYTES, PREVIEWS_DIR
+from garminsvc.deps import require_deps
 from garminsvc.job import JobStatus, job_download_filename, normalize_job_name
 from garminsvc.jobs import job_manager
 from garminsvc.osmfile import UploadError, normalize_upload_name, save_upload_stream
-from garminsvc.vectorbasemap import LAYERS_ASSET, style_dir
+from garminsvc.vectorbasemap import LAYERS_ASSET, preview_tiles_url, style_dir
 from garminsvc.vectorbasemap import config as vector_config
+from otmlib import previewqueue, previews, regionsync
+from otmlib.bbox import parse_bbox
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("server")
@@ -98,17 +108,17 @@ def create_map():
 @app.errorhandler(413)
 @app.errorhandler(RequestEntityTooLarge)
 def too_large(_exc):
-    return jsonify({"error": f"Файл больше {MAX_UPLOAD_BYTES // (1024 * 1024)} МБ"}), 413
+    return jsonify({"error": f"The file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB"}), 413
 
 
 @app.post("/maps/upload")
 def create_map_upload():
     name = normalize_job_name(str(request.form.get("name") or ""))
     if not name:
-        return jsonify({"error": "Укажите название карты"}), 400
+        return jsonify({"error": "Give the map a name"}), 400
     uploaded = request.files.get("file")
     if uploaded is None or not uploaded.filename:
-        return jsonify({"error": "Нужен файл .osm или .osm.pbf"}), 400
+        return jsonify({"error": "An .osm or .osm.pbf file is required"}), 400
     try:
         filename = normalize_upload_name(uploaded.filename)
     except UploadError as exc:
@@ -170,9 +180,9 @@ def cancel_job(job_id: str):
     if job is None:
         return jsonify({"error": "Job not found"}), 404
     if job.status not in (JobStatus.QUEUED, JobStatus.RUNNING):
-        return jsonify({"error": f"Нельзя отменить: {job.status.value}"}), 409
+        return jsonify({"error": f"Cannot cancel a {job.status.value} job"}), 409
     if not job.can_cancel(g.client_id):
-        return jsonify({"error": "Отменить сборку может только тот, кто её запустил"}), 403
+        return jsonify({"error": "Only whoever started this build can cancel it"}), 403
     job = job_manager.cancel(job_id)
     if job is None:
         return jsonify({"error": "Job not found"}), 404
@@ -196,6 +206,63 @@ def download_job(job_id: str):
     if not job.zip_path or not Path(job.zip_path).is_file():
         return jsonify({"error": "Output file missing"}), 500
     return send_file(job.zip_path, as_attachment=True, download_name=job_download_filename(job))
+
+
+def _preview_payload(preview) -> dict:
+    """The record plus, once it is built, where the browser reads it from."""
+    data = preview.to_dict()
+    if preview.status == previews.DONE and preview.tiles_file:
+        data["tiles"] = preview_tiles_url(preview.tiles_file)
+    return data
+
+
+@app.post("/preview")
+def create_preview():
+    """Queue a preview of the drawn bbox, or hand back one that already exists.
+
+    Previews are offered only for the regions the deployment keeps current: the
+    worker cuts them out of those extracts, and anything else would mean
+    downloading a fresh multi-gigabyte region on a button press.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        west, south, east, north = parse_bbox(payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    gap = regionsync.bbox_coverage_gap(west, south, east, north, GEOFABRIK_CACHE)
+    if gap:
+        return jsonify({"error": f"No preview here: {gap}"}), 400
+
+    ready = previews.find_ready(west, south, east, north, previews_dir=PREVIEWS_DIR)
+    if ready is not None:
+        return jsonify(_preview_payload(ready)), 200
+
+    active = previews.find_active(west, south, east, north)
+    if active is not None:
+        return jsonify(_preview_payload(active)), 202
+
+    preview = previews.create(west, south, east, north, owner_id=g.client_id)
+    previewqueue.enqueue(preview.preview_id)
+    return jsonify(_preview_payload(preview)), 202
+
+
+@app.get("/preview/<preview_id>")
+def get_preview(preview_id: str):
+    preview = previews.get(preview_id)
+    if preview is None:
+        return jsonify({"error": "Preview not found"}), 404
+    if preview.status == previews.DONE and preview.tiles_file:
+        if preview.is_expired():
+            # Past its TTL: the file may already have been swept, and even
+            # while it is still there it is a render of data and cartography
+            # the deployment has moved on from. Same answer as a pruned one.
+            return jsonify({"error": "This preview has expired, build it again"}), 410
+        if not (PREVIEWS_DIR / preview.tiles_file).is_file():
+            # Pruned away while the page was open: say so plainly instead of
+            # handing the browser a URL that 404s inside MapLibre.
+            return jsonify({"error": "This preview has been pruned, build it again"}), 410
+    return jsonify(_preview_payload(preview))
 
 
 @app.get("/vector/config")
@@ -226,13 +293,12 @@ def health():
 
 def prepare() -> None:
     try:
-        if not sea_bounds_ready():
-            log.info("First run: downloading sea/bounds into data/ (progress below)")
-        deps = download_deps(log=log.info)
-    except Exception as exc:  # noqa: BLE001
+        deps = require_deps()
+    except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
 
+    previews.ensure_schema()
     job_manager.start()
     log.info("Dependencies OK (mkgmap=%s, splitter=%s)", deps.mkgmap_jar, deps.splitter_jar)
 

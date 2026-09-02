@@ -1,0 +1,24 @@
+# Regions the tile job keeps current. Everything downstream follows from this
+# list: these are the PBFs a Garmin build and a map preview are cut out of, and
+# a preview is offered only for the area they cover.
+#
+# Ids are Geofabrik index ids (https://download.geofabrik.de/index-v1.json), the
+# path part of the download URL. Keep them as small as the coverage allows — a
+# region is downloaded in full and then kept current diff by diff.
+regions:
+  - russia/northwestern-fed-district
+  - russia/north-caucasus-fed-district
+  - russia/south-fed-district
+  - russia/far-eastern-fed-district
+  - russia/siberian-fed-district
+
+
+# Shared with garminsvc. Empty means OTM_DATA_DIR, then www/garminsvc/data.
+data_dir: ""
+
+# Read extracts from a local mirror instead of download.geofabrik.de. Empty
+# means the real site. The directory must hold the exact same relative paths
+# Geofabrik serves: index-v1.json, russia/northwestern-fed-district-latest.osm.pbf,
+# russia/northwestern-fed-district-updates/state.txt, its numbered .osc.gz
+# diffs, etc — e.g. mirrored with `wget -m` or rsync from the site.
+geofabrik_mirror: ""

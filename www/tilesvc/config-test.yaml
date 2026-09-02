@@ -1,0 +1,6 @@
+# Small region for smoke tests (docker compose run tilesvc-job python -m tilesvc --config …).
+regions:
+  - armenia
+  - russia/north-caucasus-fed-district
+  - russia/central-fed-district
+data_dir: ""
