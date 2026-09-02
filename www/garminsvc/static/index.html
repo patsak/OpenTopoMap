@@ -25,6 +25,7 @@
       <div id="queue-len" class="queue-len" title="Джобы, ожидающие сборки">Очередь: —</div>
       <button type="button" id="btn-clear" class="btn ghost" disabled>Сбросить</button>
       <button type="button" id="btn-cancel" class="btn danger" disabled>Отменить</button>
+      <button type="button" id="btn-preview" class="btn ghost" disabled title="Собрать превью выбранной области">Превью</button>
       <button type="button" id="btn-build" class="btn primary" disabled>Собрать карту</button>
     </div>
   </header>
@@ -49,6 +50,10 @@
         <input id="osm-file" type="file" accept=".pbf,.osm,.gz,.bz2,.xml,application/octet-stream" />
       </label>
       <p class="hint">Вместо bbox: .osm, .osm.pbf, .pbf (можно .gz / .bz2), максимум 200 МБ.</p>
+
+      <h2>Превью</h2>
+      <p class="hint">Соберёт выбранную область в стиле OpenTopoMap и покажет её на карте — как «Подложка → Превью области». Это веб-картография того же набора данных, а не точный рендер Garmin.</p>
+      <div id="preview-status" class="preview-status idle" hidden></div>
 
       <h2>Статус</h2>
       <div id="status" class="status idle">Выберите bbox</div>

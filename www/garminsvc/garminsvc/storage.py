@@ -1,154 +1,164 @@
-"""SQLite store shared by Huey (queue) and job records."""
+"""Job records in Postgres (schema ``otm_garmin``, see ../sql/001_schema.sql).
+
+The queue lives in the same database, in huey's own tables (see
+:mod:`garminsvc.tasks`), so the service has one piece of state to back up and
+one connection string to configure.
+"""
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
-from garminsvc.constants import DATA_DIR, FAMILY_ID_CONTOURS, FAMILY_ID_MAP, FAMILY_ID_MAX, JOBS_DB, JOBS_DIR
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+
+from garminsvc.constants import (
+    DATA_DIR,
+    FAMILY_ID_CONTOURS,
+    FAMILY_ID_MAP,
+    FAMILY_ID_MAX,
+    JOBS_DIR,
+    PREVIEWS_DIR,
+)
+from otmlib import pg
+
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 _local = threading.local()
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS jobs (
-  job_id TEXT PRIMARY KEY,
-  name TEXT NOT NULL DEFAULT '',
-  west REAL NOT NULL,
-  south REAL NOT NULL,
-  east REAL NOT NULL,
-  north REAL NOT NULL,
-  status TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  message TEXT NOT NULL DEFAULT '',
-  log TEXT NOT NULL DEFAULT '[]',
-  geofabrik_urls TEXT NOT NULL DEFAULT '[]',
-  parts INTEGER NOT NULL DEFAULT 0,
-  zip_path TEXT,
-  error TEXT,
-  family_id_map INTEGER NOT NULL DEFAULT 0,
-  family_id_contours INTEGER NOT NULL DEFAULT 0,
-  source_pbf TEXT,
-  owner_id TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-CREATE TABLE IF NOT EXISTS family_id_seq (
-  name TEXT PRIMARY KEY,
-  value INTEGER NOT NULL
-);
-"""
+_COLUMNS = (
+    "job_id, name, west, south, east, north, status, created_at, updated_at, "
+    "message, log, geofabrik_urls, parts, zip_path, error, "
+    "family_id_map, family_id_contours, source_pbf, owner_id"
+)
 
 
-def db_path() -> Path:
+def ensure_schema() -> None:
+    """Create the schema and seed the family-id cursors. Idempotent."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
-    return JOBS_DB
+    # nginx mounts this directory; created here so a fresh checkout does not
+    # get one made by Docker as root.
+    PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+    pg.ensure_schema(SQL_DIR)
+    with pg.connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO otm_garmin.family_id_seq (name, value)
+            VALUES ('map', %s), ('contours', %s)
+            ON CONFLICT (name) DO NOTHING
+            """,
+            (FAMILY_ID_MAP, FAMILY_ID_CONTOURS),
+        )
+        conn.commit()
 
 
-def connect() -> sqlite3.Connection:
+def connect() -> psycopg.Connection:
+    """This thread's connection, opened on first use and kept.
+
+    One per thread rather than one per call: a running build saves the job once
+    per log line, and the eight gunicorn threads poll it from the HTTP side, so
+    a connect-and-close around every statement would be most of the cost of
+    each. ``dict_row`` so ``row["name"]`` reads the way the API payload does.
+    """
     conn = getattr(_local, "conn", None)
-    if conn is not None:
+    if conn is not None and not conn.closed:
         return conn
-    path = db_path()
-    conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    # Autocommit: a leftover read transaction on a leaked thread would block Huey
-    # BEGIN EXCLUSIVE if the queue ever shared this file again.
-    conn.isolation_level = None
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(_SCHEMA)
-    _migrate(conn)
+    conn = pg.connect(row_factory=dict_row)
     _local.conn = conn
     return conn
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "family_id_map" not in cols:
-        conn.execute("ALTER TABLE jobs ADD COLUMN family_id_map INTEGER NOT NULL DEFAULT 0")
-    if "family_id_contours" not in cols:
-        conn.execute("ALTER TABLE jobs ADD COLUMN family_id_contours INTEGER NOT NULL DEFAULT 0")
-    if "source_pbf" not in cols:
-        conn.execute("ALTER TABLE jobs ADD COLUMN source_pbf TEXT")
-    if "owner_id" not in cols:
-        conn.execute("ALTER TABLE jobs ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''")
-    conn.execute(
-        "INSERT OR IGNORE INTO family_id_seq (name, value) VALUES ('map', ?), ('contours', ?)",
-        (FAMILY_ID_MAP, FAMILY_ID_CONTOURS),
-    )
-    conn.commit()
+@contextmanager
+def _session():
+    """A transaction on this thread's connection, rolled back if it fails.
+
+    Without the rollback a failed statement leaves the connection in
+    "current transaction is aborted", and — because the connection is reused —
+    every later query on this thread would fail too.
+    """
+    conn = connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except psycopg.Error:
+            # Connection is gone; drop it so the next call reconnects.
+            _local.conn = None
+        raise
 
 
-def _dumps(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _loads_list(raw: str | None) -> list:
-    if not raw:
+def _loads_list(value) -> list:
+    """jsonb comes back decoded; tolerate a text column or a NULL as well."""
+    if value is None:
         return []
-    data = json.loads(raw)
-    return data if isinstance(data, list) else []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        data = json.loads(value) if value else []
+        return data if isinstance(data, list) else []
+    return []
 
 
 def upsert_job(job: object) -> None:
-    conn = connect()
-    conn.execute(
-        """
-        INSERT INTO jobs (
-          job_id, name, west, south, east, north, status, created_at, updated_at,
-          message, log, geofabrik_urls, parts, zip_path, error,
-          family_id_map, family_id_contours, source_pbf, owner_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(job_id) DO UPDATE SET
-          name=excluded.name,
-          west=excluded.west,
-          south=excluded.south,
-          east=excluded.east,
-          north=excluded.north,
-          status=excluded.status,
-          created_at=excluded.created_at,
-          updated_at=excluded.updated_at,
-          message=excluded.message,
-          log=excluded.log,
-          geofabrik_urls=excluded.geofabrik_urls,
-          parts=excluded.parts,
-          zip_path=excluded.zip_path,
-          error=excluded.error,
-          family_id_map=excluded.family_id_map,
-          family_id_contours=excluded.family_id_contours,
-          source_pbf=excluded.source_pbf
-        """,
-        (
-            job.job_id,
-            job.name,
-            job.west,
-            job.south,
-            job.east,
-            job.north,
-            job.status.value,
-            job.created_at,
-            job.updated_at,
-            job.message,
-            _dumps(job.log),
-            _dumps(job.geofabrik_urls),
-            job.parts,
-            job.zip_path,
-            job.error,
-            job.family_id_map,
-            job.family_id_contours,
-            job.source_pbf,
-            getattr(job, "owner_id", "") or "",
-        ),
-    )
-    conn.commit()
+    with _session() as conn:
+        conn.execute(
+            f"""
+            INSERT INTO otm_garmin.jobs ({_COLUMNS})
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (job_id) DO UPDATE SET
+              name = EXCLUDED.name,
+              west = EXCLUDED.west,
+              south = EXCLUDED.south,
+              east = EXCLUDED.east,
+              north = EXCLUDED.north,
+              status = EXCLUDED.status,
+              created_at = EXCLUDED.created_at,
+              updated_at = EXCLUDED.updated_at,
+              message = EXCLUDED.message,
+              log = EXCLUDED.log,
+              geofabrik_urls = EXCLUDED.geofabrik_urls,
+              parts = EXCLUDED.parts,
+              zip_path = EXCLUDED.zip_path,
+              error = EXCLUDED.error,
+              family_id_map = EXCLUDED.family_id_map,
+              family_id_contours = EXCLUDED.family_id_contours,
+              source_pbf = EXCLUDED.source_pbf
+            """,
+            # owner_id is deliberately absent from the SET list: ownership is
+            # write-once, set when the job is created, and must not be
+            # reassigned by a later save from the worker.
+            (
+                job.job_id,
+                job.name,
+                job.west,
+                job.south,
+                job.east,
+                job.north,
+                job.status.value,
+                job.created_at,
+                job.updated_at,
+                job.message,
+                Jsonb(job.log),
+                Jsonb(job.geofabrik_urls),
+                job.parts,
+                str(job.zip_path) if job.zip_path else None,
+                job.error,
+                job.family_id_map,
+                job.family_id_contours,
+                str(job.source_pbf) if job.source_pbf else None,
+                getattr(job, "owner_id", "") or "",
+            ),
+        )
 
 
-def row_to_job(row: sqlite3.Row):
+def row_to_job(row):
     from garminsvc.job import Job, JobStatus
 
     return Job(
@@ -169,63 +179,82 @@ def row_to_job(row: sqlite3.Row):
         error=row["error"],
         family_id_map=int(row["family_id_map"] or 0),
         family_id_contours=int(row["family_id_contours"] or 0),
-        source_pbf=row["source_pbf"] if "source_pbf" in row.keys() else None,
-        owner_id=(row["owner_id"] or "") if "owner_id" in row.keys() else "",
+        source_pbf=row.get("source_pbf"),
+        owner_id=row.get("owner_id") or "",
     )
 
 
 def get_job(job_id: str):
-    row = connect().execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    with _session() as conn:
+        row = conn.execute(
+            "SELECT * FROM otm_garmin.jobs WHERE job_id = %s", (job_id,)
+        ).fetchone()
     return row_to_job(row) if row else None
 
 
 def list_jobs(limit: int = 0):
-    sql = "SELECT * FROM jobs ORDER BY created_at DESC"
+    """Jobs newest first — the order ``retention.jobs_to_keep`` expects."""
+    sql = "SELECT * FROM otm_garmin.jobs ORDER BY created_at DESC"
     params: tuple = ()
     if limit > 0:
-        sql += " LIMIT ?"
+        sql += " LIMIT %s"
         params = (limit,)
-    return [row_to_job(row) for row in connect().execute(sql, params)]
+    with _session() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [row_to_job(row) for row in rows]
 
 
 def delete_job(job_id: str) -> None:
-    conn = connect()
-    conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
-    conn.commit()
+    with _session() as conn:
+        conn.execute("DELETE FROM otm_garmin.jobs WHERE job_id = %s", (job_id,))
 
 
 def allocate_family_ids() -> tuple[int, int]:
-    """Next unique 4-digit family-id pair (map + contours), persisted in SQLite."""
-    conn = connect()
-    conn.execute("BEGIN IMMEDIATE")
-    used = set()
-    for row in conn.execute("SELECT family_id_map, family_id_contours FROM jobs"):
-        if row["family_id_map"]:
-            used.add(int(row["family_id_map"]))
-        if row["family_id_contours"]:
-            used.add(int(row["family_id_contours"]))
+    """Next unique 4-digit family-id pair (map + contours).
 
-    def _take(kind: str, start: int) -> int:
-        row = conn.execute("SELECT value FROM family_id_seq WHERE name = ?", (kind,)).fetchone()
-        candidate = int(row["value"]) if row else start
-        if candidate < start:
-            candidate = start
-        while candidate in used or candidate < 1 or candidate > FAMILY_ID_MAX:
-            candidate += 1
-            if candidate > FAMILY_ID_MAX:
-                candidate = 1000
-            if candidate == start:
-                raise RuntimeError("No free Garmin family-id left")
-        used.add(candidate)
-        conn.execute("UPDATE family_id_seq SET value = ? WHERE name = ?", (candidate + 1, kind))
-        return candidate
+    ``SELECT … FOR UPDATE`` on the cursor rows serializes concurrent
+    allocations: two jobs created at once would otherwise read the same cursor
+    and hand the same id to both maps, which a device rejects.
+    """
+    with _session() as conn:
+        used: set[int] = set()
+        for row in conn.execute(
+            "SELECT family_id_map, family_id_contours FROM otm_garmin.jobs"
+        ).fetchall():
+            if row["family_id_map"]:
+                used.add(int(row["family_id_map"]))
+            if row["family_id_contours"]:
+                used.add(int(row["family_id_contours"]))
 
-    map_id = _take("map", FAMILY_ID_MAP)
-    contours_id = _take("contours", FAMILY_ID_CONTOURS)
-    conn.commit()
+        def take(kind: str, start: int) -> int:
+            row = conn.execute(
+                "SELECT value FROM otm_garmin.family_id_seq WHERE name = %s FOR UPDATE",
+                (kind,),
+            ).fetchone()
+            candidate = int(row["value"]) if row else start
+            if candidate < start:
+                candidate = start
+            while candidate in used or candidate < 1 or candidate > FAMILY_ID_MAX:
+                candidate += 1
+                if candidate > FAMILY_ID_MAX:
+                    candidate = 1000
+                if candidate == start:
+                    raise RuntimeError("No free Garmin family-id left")
+            used.add(candidate)
+            conn.execute(
+                "UPDATE otm_garmin.family_id_seq SET value = %s WHERE name = %s",
+                (candidate + 1, kind),
+            )
+            return candidate
+
+        map_id = take("map", FAMILY_ID_MAP)
+        contours_id = take("contours", FAMILY_ID_CONTOURS)
     return map_id, contours_id
 
 
 def count_by_status(status: str) -> int:
-    row = connect().execute("SELECT COUNT(*) AS n FROM jobs WHERE status = ?", (status,)).fetchone()
+    with _session() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM otm_garmin.jobs WHERE status = %s", (status,)
+        ).fetchone()
     return int(row["n"] if row else 0)

@@ -1,0 +1,6 @@
+# supercronic schedule for the tile job (see Dockerfile).
+# Nightly: Geofabrik publishes daily diffs, and a full tilemaker run over the
+# configured federal districts takes hours, so anything more frequent would
+# just overlap itself. A night with no new diffs costs only the state.txt
+# fetches - both the tileset build and the ocean build are skip-if-current.
+0 2 * * * cd /app && /opt/otm-venv/bin/python -m tilesvc

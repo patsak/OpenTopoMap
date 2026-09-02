@@ -6,7 +6,7 @@ OsmAnd approach (see OsmAnd-resources default/topo.render.xml):
   natural=ridge / natural=arete (manually mapped crest lines).
 
 This script extracts those ways from an OSM PBF and writes a lightweight
-OSM XML for the contours-sparse overlay (resolutions 20–22).
+OSM XML for the contours-hike overlay (resolutions 20–22).
 
 Usage:
   .venv/bin/python tools/contours_to_ridges.py \\

@@ -9,11 +9,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from garminsvc.bbox import BBox, validate_bbox_size
-from garminsvc.constants import DEM_CACHE, FAMILY_ID_CONTOURS, FAMILY_ID_MAP, GEOFABRIK_CACHE, ROOT
-from garminsvc.dem import prepare_dem_for_bbox
+from garminsvc.constants import (
+    FAMILY_ID_CONTOURS,
+    FAMILY_ID_MAP,
+    GEOFABRIK_CACHE,
+    HGT_CACHE,
+    ROOT,
+)
 from garminsvc.deps import Deps, require_deps
-from garminsvc.geofabrik import download_regions, extract_bbox, find_leaf_regions
 from garminsvc.names import garmin_map_names
 from garminsvc.pipeline import (
     BuildContext,
@@ -27,7 +30,12 @@ from garminsvc.pipeline import (
     set_contour_area_from_bbox,
     write_bbox_poly,
 )
-from garminsvc.proc import check_cancelled
+from otmlib.bbox import BBox, validate_bbox_size
+from otmlib.dem import prepare_dem_for_bbox
+from otmlib.geofabrik import extract_bbox, find_leaf_regions
+from otmlib.osm_areas import glacier_subset
+from otmlib.proc import check_cancelled
+from otmlib.regionsync import sync_regions
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +76,12 @@ class MapBuilder:
         return self._deps
 
     def _prepare_geofabrik(self, bbox: BBox) -> None:
+        """Download (and bring current) the smallest extracts covering *bbox*.
+
+        The cache is shared with tilesvc, and so is the replication tracking in
+        ``otm.replication_state`` — a region tilesvc already keeps up to date
+        needs nothing here beyond a state.txt check.
+        """
         if self._geofabrik_pbfs:
             return
         regions = find_leaf_regions(
@@ -79,7 +93,8 @@ class MapBuilder:
         )
         self._geofabrik_urls = [r.pbf_url for r in regions]
         self.log(f"Geofabrik: {', '.join(r.name for r in regions)}")
-        self._geofabrik_pbfs = download_regions(regions, GEOFABRIK_CACHE, self.log)
+        results = sync_regions(regions, GEOFABRIK_CACHE, self.log)
+        self._geofabrik_pbfs = [r.pbf for r in results]
 
     def _build_map(
         self,
@@ -116,6 +131,7 @@ class MapBuilder:
 
         pbf_path = part_dir / "data" / "region.osm.pbf"
         pbf_path.parent.mkdir(parents=True, exist_ok=True)
+        glacier_path = part_dir / "data" / "glaciers.osm.pbf"
 
         if source_pbf is not None:
             from garminsvc.osmfile import bbox_from_pbf, to_pbf
@@ -142,6 +158,11 @@ class MapBuilder:
                 pbf_path,
             )
 
+        # Both paths end with one clipped regional PBF, so the glacier subset is
+        # cut from it the same way - crevasse stripes and contour post-processing
+        # only need the glacier/moraine features, and running them over the whole
+        # extract is what this filter avoids.
+        ctx.glacier_pbf = glacier_subset(pbf_path, glacier_path)
         ctx.pbf_input = pbf_path
         check_cancelled()
 
@@ -151,7 +172,7 @@ class MapBuilder:
             bbox.east,
             bbox.north,
             part_dir,
-            cache_dir=DEM_CACHE / "hgt",
+            cache_dir=HGT_CACHE,
             log=self.log,
         )
         ctx.hgt_dir = hgt_dir
@@ -223,7 +244,9 @@ class MapBuilder:
             source_pbf=source_pbf,
         )
         zip_path = self._create_zip([part])
-        return BuildResult(parts=[part], geofabrik_urls=self._geofabrik_urls, zip_path=zip_path)
+        return BuildResult(
+            parts=[part], geofabrik_urls=self._geofabrik_urls, zip_path=zip_path
+        )
 
     def _create_zip(self, parts: list[MapPart]) -> Path:
         zip_path = self.job_dir / "maps.zip"

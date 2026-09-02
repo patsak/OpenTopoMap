@@ -14,6 +14,8 @@
     history: document.getElementById("history"),
     historyEmpty: document.getElementById("history-empty"),
     basemap: document.getElementById("basemap"),
+    preview: document.getElementById("btn-preview"),
+    previewStatus: document.getElementById("preview-status"),
     mapName: document.getElementById("map-name"),
     historyFilter: document.getElementById("history-filter"),
     osmFile: document.getElementById("osm-file"),
@@ -23,14 +25,18 @@
   const BASEMAP_STORAGE_KEY = "otm-garmin-basemap";
   const OSM_ATTR =
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-  const VECTOR_BASEMAP_ID = "otm-vector";
+  // The built preview of the drawn bbox, offered in the same dropdown as the
+  // public maps: it is a whole map (the OTM style has its own background), not
+  // something that can sit on top of one.
+  const PREVIEW_BASEMAP_ID = "otm-preview";
   const MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.css";
-  // Pinned like in vector/maplibregljs/index.html: maplibre-gl 6.x no longer ships
-  // dist/maplibre-gl.js, and hillshade-method needs 5 or newer anyway.
+  // Pinned to 5: maplibre-gl 6.x no longer ships dist/maplibre-gl.js, and
+  // hillshade-method needs 5 or newer anyway.
   const VECTOR_LIBS = [
     "https://cdn.jsdelivr.net/npm/maplibre-gl@5/dist/maplibre-gl.js",
-    "https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js",
+    "https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.0/dist/index.min.js",
     "https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js",
+    "https://cdn.jsdelivr.net/npm/pmtiles@4.4.0/dist/pmtiles.js",
   ];
   const BASEMAPS = [
     {
@@ -86,19 +92,123 @@
 
   let bbox = null;
   let pollTimer = null;
+  let previewTimer = null;
   let drawnLayer = null;
   let currentJobId = null;
   let historyJobs = [];
 
-  const map = L.map("map", { zoomControl: true }).setView([43.3, 42.5], 9);
+  // URL hash keeps the current view shareable/bookmarkable: #zoom/lat/lon.
+  function readHash() {
+    const match = /^#(\d{1,2}(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/.exec(location.hash);
+    if (!match) return null;
+    const [, zoomStr, latStr, lonStr] = match;
+    const view = { zoom: Number(zoomStr), lat: Number(latStr), lon: Number(lonStr) };
+    if (Math.abs(view.lat) > 90 || Math.abs(view.lon) > 180) return null;
+    return view;
+  }
+
+  const initialView = readHash();
+
+  const map = L.map("map", { zoomControl: true }).setView(
+    initialView ? [initialView.lat, initialView.lon] : [43.3, 42.5],
+    initialView ? initialView.zoom : 9,
+  );
   let baseLayer = null;
 
-  // The MapLibre style of vector/, i.e. the same cartography the build puts on the
-  // device. It needs a tileset configured for the service, so the option appears only
-  // when /vector/config says so, and MapLibre itself is fetched on first use — it is
-  // an order of magnitude heavier than Leaflet.
-  let vectorSpec = null;
+  L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+
+  function writeHash() {
+    const center = map.getCenter();
+    const hash = `#${map.getZoom()}/${center.lat.toFixed(5)}/${center.lng.toFixed(5)}`;
+    history.replaceState(null, "", hash);
+  }
+  map.on("moveend", writeHash);
+  writeHash();
+
+  // Manual edits to the URL (paste, browser back/forward) jump the map too.
+  window.addEventListener("hashchange", () => {
+    const view = readHash();
+    if (view) map.setView([view.lat, view.lon], view.zoom);
+  });
+
+  // Accepts "lat, lon" (the usual copy-paste order) but also falls back to
+  // "lon, lat" when only that order is a valid lat/lon pair.
+  function parseCoordinates(text) {
+    const parts = text.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean).map(Number);
+    if (parts.length !== 2 || parts.some(Number.isNaN)) return null;
+    const [a, b] = parts;
+    let lat = a;
+    let lon = b;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      lat = b;
+      lon = a;
+    }
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon };
+  }
+
+  const GotoControl = L.Control.extend({
+    options: { position: "topright" },
+    onAdd() {
+      const container = L.DomUtil.create("div", "goto-control leaflet-bar");
+      const toggle = L.DomUtil.create("button", "goto-toggle", container);
+      toggle.type = "button";
+      toggle.title = "Перейти к координатам";
+      toggle.setAttribute("aria-label", "Перейти к координатам");
+      toggle.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>';
+
+      const panel = L.DomUtil.create("div", "goto-panel", container);
+      const input = L.DomUtil.create("input", "", panel);
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.placeholder = "55.7558, 37.6173";
+      input.autocomplete = "off";
+      const error = L.DomUtil.create("div", "goto-error", panel);
+      error.hidden = true;
+      const hint = L.DomUtil.create("div", "goto-hint", panel);
+      hint.textContent = "Широта, долгота (или долгота, широта — формат определится сам)";
+      const goBtn = L.DomUtil.create("button", "btn primary goto-go", panel);
+      goBtn.type = "button";
+      goBtn.textContent = "Перейти";
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      function goToCoordinates() {
+        const coords = parseCoordinates(input.value);
+        if (!coords) {
+          error.textContent = "Не удалось распознать координаты. Пример: 55.7558, 37.6173";
+          error.hidden = false;
+          return;
+        }
+        error.hidden = true;
+        map.setView([coords.lat, coords.lon], Math.max(map.getZoom(), 14));
+      }
+
+      toggle.addEventListener("click", () => {
+        panel.classList.toggle("open");
+        if (panel.classList.contains("open")) input.focus();
+      });
+      goBtn.addEventListener("click", goToCoordinates);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          goToCoordinates();
+        }
+      });
+
+      return container;
+    },
+  });
+  map.addControl(new GotoControl());
+
+  // Public raster maps are what the picker shows; the service does not proxy
+  // them. The one OTM-styled map it can produce is a preview of the drawn bbox,
+  // which joins this list as an extra option once it has been built.
   let vectorLibs = null;
+  let styleSpec = null; // /vector/config — MapLibre style assets and the DEM
+  let previewSpec = null; // the built preview: {preview_id, tiles, …}
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -120,6 +230,11 @@
         for (const src of [...VECTOR_LIBS, spec.layers, spec.style]) {
           await loadScript(src);
         }
+        // A preview is one .pmtiles file read with range requests, so the
+        // protocol has to exist before a style may name one. metadata:true is
+        // what makes a pmtiles:// URL answer with TileJSON (layer list, zoom
+        // range, coverage) instead of tiles alone.
+        maplibregl.addProtocol("pmtiles", new pmtiles.Protocol({ metadata: true }).tile);
       })();
       vectorLibs.catch(() => {
         vectorLibs = null; // let the next attempt retry the download
@@ -135,19 +250,16 @@
     return url.startsWith("/") ? window.location.origin + url : url;
   }
 
-  async function vectorBaseLayer(spec) {
+  async function previewBaseLayer(spec, preview) {
     await ensureVectorLibs(spec);
-    const contours = spec.contours
-      ? { ...spec.contours, tiles: absoluteUrl(spec.contours.tiles) }
-      : null;
     return L.maplibreGL({
       attribution: spec.attribution,
       style: otmVectorStyle({
-        tiles: absoluteUrl(spec.tiles),
-        maxzoom: spec.maxzoom,
-        bounds: spec.bounds || undefined,
+        // Zoom range and coverage come out of the file header, so MapLibre
+        // asks for nothing outside the area that was built.
+        url: `pmtiles://${preview.tiles}`,
         attribution: spec.attribution,
-        contours,
+        dem: spec.dem ? { ...spec.dem, tiles: absoluteUrl(spec.dem.tiles) } : undefined,
         sprite: absoluteUrl(spec.sprite),
         globe: false, // Leaflet only knows Mercator
       }),
@@ -157,11 +269,12 @@
   async function setBasemap(id) {
     let layer = null;
     let chosen = id;
-    if (id === VECTOR_BASEMAP_ID && vectorSpec) {
+    if (id === PREVIEW_BASEMAP_ID && styleSpec && previewSpec && previewSpec.tiles) {
       try {
-        layer = await vectorBaseLayer(vectorSpec);
+        layer = await previewBaseLayer(styleSpec, previewSpec);
       } catch (err) {
-        console.warn("векторная подложка недоступна", err);
+        console.warn("превью не отрисовалось", err);
+        setPreviewStatus("error", "Превью собрано, но не отрисовалось — см. консоль");
       }
     }
     if (!layer) {
@@ -184,7 +297,7 @@
     try {
       localStorage.setItem(BASEMAP_STORAGE_KEY, chosen);
     } catch {
-      /* ignore */
+      /* quota / private mode */
     }
   }
 
@@ -194,34 +307,35 @@
     option.textContent = spec.name;
     el.basemap.append(option);
   }
+
   let savedBasemap = "osm";
   try {
     savedBasemap = localStorage.getItem(BASEMAP_STORAGE_KEY) || "osm";
   } catch {
     savedBasemap = "osm";
   }
-  setBasemap(savedBasemap);
+  // A preview from a previous session is not on the map yet, and its file may
+  // have been pruned since; fall back to the raster default until one is built.
+  setBasemap(savedBasemap === PREVIEW_BASEMAP_ID ? "osm" : savedBasemap);
   el.basemap.addEventListener("change", () => setBasemap(el.basemap.value));
 
   (async () => {
-    let spec = null;
     try {
-      spec = await (await fetch("/vector/config")).json();
+      styleSpec = await (await fetch("/vector/config")).json();
     } catch (err) {
-      console.warn("не удалось спросить про векторную подложку", err);
+      console.warn("не удалось спросить про стиль карты", err);
+    }
+    if (!styleSpec || !styleSpec.available) {
+      el.preview.title = (styleSpec && styleSpec.reason) || "стиль карты не установлен";
+      styleSpec = null;
+      updatePreviewEnabled();
       return;
     }
-    if (!spec || !spec.available) {
-      return;
+    // A URL already pointing somewhere wins over the server's default center.
+    if (!initialView && Array.isArray(styleSpec.center) && styleSpec.center.length === 2) {
+      map.setView(styleSpec.center, styleSpec.zoom || map.getZoom());
     }
-    vectorSpec = spec;
-    const option = document.createElement("option");
-    option.value = VECTOR_BASEMAP_ID;
-    option.textContent = spec.name;
-    el.basemap.append(option);
-    if (savedBasemap === VECTOR_BASEMAP_ID) {
-      setBasemap(VECTOR_BASEMAP_ID);
-    }
+    updatePreviewEnabled();
   })();
 
   const drawnItems = new L.FeatureGroup().addTo(map);
@@ -387,6 +501,8 @@
       el.osmFile.value = "";
     }
     stopPoll();
+    stopPreviewPoll();
+    setPreviewStatus("idle", "");
     hideDownload();
     el.log.hidden = true;
     el.log.textContent = "";
@@ -403,7 +519,108 @@
     el.download.removeAttribute("href");
   }
 
+  function updatePreviewEnabled() {
+    // A preview needs only an area: no name, no uploaded file, and it does not
+    // wait for the build queue - the worker behind it is a different one.
+    el.preview.disabled =
+      !styleSpec || !bbox || Boolean(previewTimer) || bboxMaxSideKm(bbox) > MAX_BBOX_SIDE_KM;
+  }
+
+  function setPreviewStatus(kind, text) {
+    el.previewStatus.className = `preview-status ${kind}`;
+    el.previewStatus.textContent = text || "";
+    el.previewStatus.hidden = !text;
+  }
+
+  function stopPreviewPoll() {
+    if (previewTimer) {
+      clearInterval(previewTimer);
+      previewTimer = null;
+    }
+  }
+
+  function showPreviewOption(preview) {
+    previewSpec = preview;
+    let option = el.basemap.querySelector(`option[value="${PREVIEW_BASEMAP_ID}"]`);
+    if (!option) {
+      option = document.createElement("option");
+      option.value = PREVIEW_BASEMAP_ID;
+      el.basemap.append(option);
+    }
+    option.textContent = (styleSpec && styleSpec.name) || "Превью области";
+    setBasemap(PREVIEW_BASEMAP_ID);
+  }
+
+  // Returns true once the preview has reached a final state.
+  function renderPreview(data) {
+    if (data.status === "done") {
+      stopPreviewPoll();
+      const mb = Math.max(1, Math.round((data.size_bytes || 0) / 1e6));
+      setPreviewStatus("done", `Готово (${mb} МБ) — показано на карте`);
+      showPreviewOption(data);
+      updatePreviewEnabled();
+      return true;
+    }
+    if (data.status === "error") {
+      stopPreviewPoll();
+      setPreviewStatus("error", data.error || "Ошибка сборки превью");
+      updatePreviewEnabled();
+      return true;
+    }
+    // A preview sitting in "queued" for a minute means nothing is consuming the
+    // queue - almost always the tilesvc-preview container is not running.
+    const stalled =
+      data.status === "queued" && (data.age_seconds || 0) > 60
+        ? " — воркер превью запущен?"
+        : "";
+    setPreviewStatus("running", `${data.message || data.status}${stalled}`);
+    return false;
+  }
+
+  function pollPreview(previewId) {
+    stopPreviewPoll();
+    previewTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/preview/${previewId}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        renderPreview(data);
+      } catch (err) {
+        stopPreviewPoll();
+        setPreviewStatus("error", String(err.message || err));
+        updatePreviewEnabled();
+      }
+    }, 2000);
+    updatePreviewEnabled();
+  }
+
+  async function requestPreview() {
+    if (!bbox || !styleSpec) return;
+    el.preview.disabled = true;
+    setPreviewStatus("running", "Запрашиваю превью…");
+    try {
+      const res = await fetch("/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bbox),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      if (!renderPreview(data)) {
+        pollPreview(data.preview_id);
+      }
+    } catch (err) {
+      setPreviewStatus("error", String(err.message || err));
+      updatePreviewEnabled();
+    }
+  }
+
   function updateBuildEnabled() {
+    updatePreviewEnabled();
     if (pollTimer) {
       el.build.disabled = true;
       return;
@@ -631,6 +848,8 @@
   });
 
   el.clear.addEventListener("click", clearBbox);
+
+  el.preview.addEventListener("click", requestPreview);
 
   el.cancel.addEventListener("click", () => {
     requestCancel(currentJobId);

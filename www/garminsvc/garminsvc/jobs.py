@@ -1,4 +1,4 @@
-"""Job queue (Huey) and job records — both stored in SQLite."""
+"""Job queue (Huey) and job records — both stored in Postgres."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from garminsvc.constants import JOBS_DIR
 from garminsvc.job import Job, JobStatus, job_download_filename, normalize_job_name
-from garminsvc.proc import BuildCancelled, cancel_event
+from otmlib.proc import BuildCancelled, cancel_event
 from garminsvc.retention import MAX_STORED_JOBS, cleanup_work_dir, jobs_to_keep
 from garminsvc.storage import (
     allocate_family_ids,
@@ -49,9 +49,11 @@ class JobManager:
         with self._lock:
             if self._started:
                 return
-            from garminsvc.storage import connect
+            from garminsvc.storage import ensure_schema
 
-            connect()
+            # Both this schema and huey's own tables must exist before the
+            # consumer thread starts touching them.
+            ensure_schema()
             self._migrate_json_jobs()
             from garminsvc.tasks import huey
 

@@ -5,4 +5,8 @@ pyhgtmap>=2.0
 npyosmium>=4.0
 numpy>=1.24
 scipy>=1.10
-huey>=2.5
+# PostgresHuey (the psycopg3 queue backend) landed in huey 3; 2.x has no
+# Postgres storage at all and would silently resolve to a SQLite-only huey.
+huey>=3.0
+# huey's Postgres backend requires psycopg 3.2 or newer.
+psycopg[binary]>=3.2

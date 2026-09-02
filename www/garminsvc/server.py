@@ -17,20 +17,22 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+# In Docker otmlib sits next to garminsvc under /app; in a checkout it is in www/.
+sys.path[:0] = [str(ROOT), str(ROOT.parent)]
 
 from flask import Flask, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from garminsvc.bbox import parse_bbox
 from garminsvc.client import CLIENT_COOKIE, CLIENT_COOKIE_MAX_AGE, resolve_client_id
-from garminsvc.constants import JOBS_DIR, MAX_UPLOAD_BYTES
+from garminsvc.constants import GEOFABRIK_CACHE, JOBS_DIR, MAX_UPLOAD_BYTES, PREVIEWS_DIR
 from garminsvc.deps import download_deps, require_deps, sea_bounds_ready
 from garminsvc.job import JobStatus, job_download_filename, normalize_job_name
 from garminsvc.jobs import job_manager
 from garminsvc.osmfile import UploadError, normalize_upload_name, save_upload_stream
-from garminsvc.vectorbasemap import LAYERS_ASSET, style_dir
+from garminsvc.vectorbasemap import LAYERS_ASSET, preview_tiles_url, style_dir
 from garminsvc.vectorbasemap import config as vector_config
+from otmlib import previewqueue, previews, regionsync
+from otmlib.bbox import parse_bbox
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("server")
@@ -198,6 +200,58 @@ def download_job(job_id: str):
     return send_file(job.zip_path, as_attachment=True, download_name=job_download_filename(job))
 
 
+def _preview_payload(preview) -> dict:
+    """The record plus, once it is built, where the browser reads it from."""
+    data = preview.to_dict()
+    if preview.status == previews.DONE and preview.tiles_file:
+        data["tiles"] = preview_tiles_url(preview.tiles_file)
+    return data
+
+
+@app.post("/preview")
+def create_preview():
+    """Queue a preview of the drawn bbox, or hand back one that already exists.
+
+    Previews are offered only for the regions the deployment keeps current: the
+    worker cuts them out of those extracts, and anything else would mean
+    downloading a fresh multi-gigabyte region on a button press.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        west, south, east, north = parse_bbox(payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    gap = regionsync.bbox_coverage_gap(west, south, east, north, GEOFABRIK_CACHE)
+    if gap:
+        return jsonify({"error": f"Превью недоступно: {gap}"}), 400
+
+    ready = previews.find_ready(west, south, east, north, previews_dir=PREVIEWS_DIR)
+    if ready is not None:
+        return jsonify(_preview_payload(ready)), 200
+
+    active = previews.find_active(west, south, east, north)
+    if active is not None:
+        return jsonify(_preview_payload(active)), 202
+
+    preview = previews.create(west, south, east, north, owner_id=g.client_id)
+    previewqueue.enqueue(preview.preview_id)
+    return jsonify(_preview_payload(preview)), 202
+
+
+@app.get("/preview/<preview_id>")
+def get_preview(preview_id: str):
+    preview = previews.get(preview_id)
+    if preview is None:
+        return jsonify({"error": "Preview not found"}), 404
+    if preview.status == previews.DONE and preview.tiles_file:
+        if not (PREVIEWS_DIR / preview.tiles_file).is_file():
+            # Pruned away while the page was open: say so plainly instead of
+            # handing the browser a URL that 404s inside MapLibre.
+            return jsonify({"error": "Превью уже удалено, соберите заново"}), 410
+    return jsonify(_preview_payload(preview))
+
+
 @app.get("/vector/config")
 def vector_basemap_config():
     """Tells the picker whether the vector basemap can be offered, and where from."""
@@ -233,6 +287,7 @@ def prepare() -> None:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
 
+    previews.ensure_schema()
     job_manager.start()
     log.info("Dependencies OK (mkgmap=%s, splitter=%s)", deps.mkgmap_jar, deps.splitter_jar)
 

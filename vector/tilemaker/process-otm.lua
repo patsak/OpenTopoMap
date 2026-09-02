@@ -443,8 +443,12 @@ function process_water_polygons(way_area)
 		AttributeNumeric("way_area", way_area)
 		ZOrder(way_area)
 		if Holds("name") then
+			-- hike: named water bodies are labelled from z12 rather than only at
+			-- z14. Glaciers are the primary content of this map and are named on
+			-- approach; the style holds lakes back to z13 on its own side, so
+			-- lowering the floor here does not clutter the lowland view.
 			LayerAsCentroid("water_polygons_labels")
-			MinZoom(14)
+			MinZoom(math.max(mz, 12))
 			Attribute("type", kind)
 			AttributeNumeric("way_area", way_area)
 			ZOrder(way_area)
@@ -581,7 +585,10 @@ function process_land()
 		-- hike: grassland is styled like meadow, so it appears at the same zoom
 		kind = natural
 		mz = 10
-	elseif natural == "wood" or natural == "heath" or natural == "scrub" or natural == "bare_rock" or natural == "scree" or natural == "shingle" or natural == "sand" or natural == "beach" then
+	-- hike: natural=fell is the above-treeline grazing land of the Nordic and
+	-- Caucasus ranges; it gets its own stipple (Garmin area type 0x58) rather than
+	-- falling through to no fill at all.
+	elseif natural == "wood" or natural == "heath" or natural == "scrub" or natural == "bare_rock" or natural == "scree" or natural == "shingle" or natural == "sand" or natural == "beach" or natural == "fell" then
 		kind = natural
 		mz = 11
 	elseif wetland == "swamp" or wetland == "bog" or wetland == "string_bog" or wetland == "wet_meadow" or wetland == "marsh" then
@@ -1146,7 +1153,9 @@ end
 
 function process_natural(poly_or_line)
 	local waterway_values = Set { "dam", "weir" }
-	local natural_values = Set { "cliff", "crevasse" }
+	-- hike: ridge/arete carry the relief crest line that the hypsometric tint alone
+	-- cannot show; they are the only members of this layer drawn below z12.
+	local natural_values = Set { "cliff", "crevasse", "ridge", "arete" }
 	local man_made_values = Set { "embankment", "dyke", "breakwater", "pier", "groyne" }
 	local barrier_values = Set { "ditch", "city_wall" }
 	
@@ -1176,7 +1185,9 @@ function process_natural(poly_or_line)
 	mz = 12
 	-- hike: crevasses are the main obstacle on a glacier, so they are carried three
 	-- zooms earlier than the rest of this layer instead of appearing only on approach.
-	if natural == "crevasse" then
+	-- Ridges and aretes come early for the opposite reason - they are the coarse
+	-- relief the style leans on at low zoom, where nothing else outlines a range.
+	if natural == "crevasse" or natural == "ridge" or natural == "arete" then
 		mz = 9
 	end
 	--Attribute("waterway", nilToEmptyStr(waterway))

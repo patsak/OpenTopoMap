@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from otmlib import paths
+
 ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = ROOT.parent.parent
 
@@ -14,10 +16,6 @@ FAMILY_ID_CONTOURS = 5355
 FAMILY_ID_MAX = 9999
 # One value per level of style/opentopomap-hike/options: 24, 23, 22, 21, 20, 19, 18, 16
 DEM_DISTS = "9942,9942,9942,19884,19884,39768,39768,53024"
-
-# Adaptive contour spacing: plain 10 m, mountain 20 m (Genshtab-style).
-MOUNTAIN_RELIEF_M = 300
-MOUNTAIN_MAX_ELEV_M = 1200
 
 MKGMAP_VERSION = "mkgmap-r4924"
 SPLITTER_VERSION = "splitter-r654"
@@ -36,19 +34,21 @@ OPTIONS_MAIN = GARMIN_DIR / "opentopomap_hike_options"
 OPTIONS_CONTOURS = GARMIN_DIR / "contours_hike_options"
 RIDGES_SCRIPT = TOOLS_DIR / "contours_to_ridges.py"
 
-DATA_DIR = ROOT / "data"
+# Shared with tilesvc and Martin: same tree, same layout (see otmlib.paths).
+DATA_DIR = paths.resolve_data_dir(ROOT / "data")
 SEA_DIR = DATA_DIR / "sea"
 BOUNDS_DIR = DATA_DIR / "bounds"
-GEOFABRIK_CACHE = DATA_DIR / "geofabrik-cache"
-DEM_CACHE = DATA_DIR / "dem-cache"
+HGT_CACHE = paths.hgt_cache(DATA_DIR)
+# Geofabrik extracts, shared with tilesvc: the same file is both a bbox source
+# here and tilemaker's input there, kept current from one tracked sequence.
+GEOFABRIK_CACHE = paths.geofabrik_cache(DATA_DIR)
 JOBS_DIR = DATA_DIR / "jobs"
-JOBS_DB = DATA_DIR / "garminsvc.db"
+# Built bbox previews (<id>.pmtiles). Written by the preview worker in the
+# tilesvc image, published as static files by nginx, and read here only to
+# check that a finished preview is still on disk.
+PREVIEWS_DIR = paths.previews(DATA_DIR)
 # MapLibre style of the vector map shown as a basemap in the bbox picker. In a git
 # checkout the style lives at repo/vector/; in Docker it is bind-mounted into /app,
 # and a deployment without the repo can drop the files into data/vector instead.
 VECTOR_STYLE_DIRS = (ROOT / "vector/maplibregljs", REPO_ROOT / "vector/maplibregljs", DATA_DIR / "vector")
-# Vector tilesets for Martin (see vector/HOWTO_vector_tiles.md). Flask does not serve them.
-VECTOR_TILES_DIR = DATA_DIR / "vector-tiles"
-# Huey BEGIN EXCLUSIVE cannot share this file with job records / HTTP polls.
-HUEY_DB = DATA_DIR / "huey.db"
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024

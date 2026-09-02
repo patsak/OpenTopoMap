@@ -3,36 +3,36 @@
   "height": 20,
   "pixelRatio": 1,
   "width": 20,
-  "x": 48,
+  "x": 72,
   "y": 88
  },
  "barrier": {
   "height": 14,
   "pixelRatio": 1,
   "width": 14,
-  "x": 236,
+  "x": 260,
   "y": 88
  },
  "bridge": {
   "height": 10,
   "pixelRatio": 1,
   "width": 18,
-  "x": 408,
+  "x": 432,
   "y": 88
  },
  "bus_stop": {
   "height": 18,
   "pixelRatio": 1,
   "width": 18,
-  "x": 196,
+  "x": 220,
   "y": 88
  },
  "camp_site": {
   "height": 22,
   "pixelRatio": 1,
   "width": 22,
-  "x": 470,
-  "y": 54
+  "x": 0,
+  "y": 88
  },
  "castle": {
   "height": 32,
@@ -52,7 +52,7 @@
   "height": 12,
   "pixelRatio": 1,
   "width": 14,
-  "x": 304,
+  "x": 328,
   "y": 88
  },
  "church": {
@@ -66,14 +66,14 @@
   "height": 10,
   "pixelRatio": 1,
   "width": 10,
-  "x": 428,
+  "x": 452,
   "y": 88
  },
  "communications_mast": {
   "height": 24,
   "pixelRatio": 1,
   "width": 22,
-  "x": 368,
+  "x": 402,
   "y": 54
  },
  "communications_tower": {
@@ -94,49 +94,49 @@
   "height": 20,
   "pixelRatio": 1,
   "width": 18,
-  "x": 70,
+  "x": 94,
   "y": 88
  },
  "drinking_water": {
   "height": 28,
   "pixelRatio": 1,
   "width": 26,
-  "x": 340,
+  "x": 374,
   "y": 54
  },
  "ford": {
   "height": 6,
   "pixelRatio": 1,
   "width": 18,
-  "x": 468,
+  "x": 492,
   "y": 88
  },
  "glacier_point": {
   "height": 10,
   "pixelRatio": 1,
   "width": 10,
-  "x": 440,
+  "x": 464,
   "y": 88
  },
  "hospital": {
   "height": 20,
   "pixelRatio": 1,
   "width": 20,
-  "x": 90,
+  "x": 114,
   "y": 88
  },
  "information": {
   "height": 24,
   "pixelRatio": 1,
   "width": 16,
-  "x": 392,
+  "x": 426,
   "y": 54
  },
  "memorial": {
   "height": 20,
   "pixelRatio": 1,
   "width": 18,
-  "x": 112,
+  "x": 136,
   "y": 88
  },
  "observation_tower": {
@@ -150,7 +150,7 @@
   "height": 22,
   "pixelRatio": 1,
   "width": 22,
-  "x": 0,
+  "x": 24,
   "y": 88
  },
  "pattern-bare-rock": {
@@ -181,158 +181,165 @@
   "x": 368,
   "y": 0
  },
- "pattern-forest": {
+ "pattern-fell": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 402,
   "y": 0
  },
- "pattern-forest-conifer": {
+ "pattern-forest": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 436,
   "y": 0
  },
- "pattern-forest-deciduous": {
+ "pattern-forest-conifer": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 470,
   "y": 0
  },
- "pattern-meadow": {
+ "pattern-forest-deciduous": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 0,
   "y": 54
  },
- "pattern-moraine": {
+ "pattern-meadow": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 34,
   "y": 54
  },
- "pattern-orchard": {
+ "pattern-moraine": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 68,
   "y": 54
  },
- "pattern-quarry": {
+ "pattern-orchard": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 102,
   "y": 54
  },
- "pattern-sand": {
+ "pattern-quarry": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 136,
   "y": 54
  },
- "pattern-scree": {
+ "pattern-sand": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 170,
   "y": 54
  },
- "pattern-scrub": {
+ "pattern-scree": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 204,
   "y": 54
  },
- "pattern-vineyard": {
+ "pattern-scrub": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 238,
   "y": 54
  },
- "pattern-wetland": {
+ "pattern-vineyard": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 272,
   "y": 54
  },
- "peak": {
-  "height": 12,
-  "pixelRatio": 1,
-  "width": 14,
-  "x": 320,
-  "y": 88
- },
- "pharmacy": {
-  "height": 24,
-  "pixelRatio": 1,
-  "width": 22,
-  "x": 410,
-  "y": 54
- },
- "saddle": {
-  "height": 11,
-  "pixelRatio": 1,
-  "width": 14,
-  "x": 392,
-  "y": 88
- },
- "shelter": {
-  "height": 19,
-  "pixelRatio": 1,
-  "width": 20,
-  "x": 174,
-  "y": 88
- },
- "sinkhole": {
-  "height": 12,
-  "pixelRatio": 1,
-  "width": 14,
-  "x": 336,
-  "y": 88
- },
- "spring": {
-  "height": 14,
-  "pixelRatio": 1,
-  "width": 14,
-  "x": 252,
-  "y": 88
- },
- "station": {
-  "height": 18,
-  "pixelRatio": 1,
-  "width": 18,
-  "x": 216,
-  "y": 88
- },
- "supermarket": {
+ "pattern-wetland": {
   "height": 32,
   "pixelRatio": 1,
   "width": 32,
   "x": 306,
   "y": 54
  },
+ "peak": {
+  "height": 12,
+  "pixelRatio": 1,
+  "width": 14,
+  "x": 344,
+  "y": 88
+ },
+ "pharmacy": {
+  "height": 24,
+  "pixelRatio": 1,
+  "width": 22,
+  "x": 444,
+  "y": 54
+ },
+ "saddle": {
+  "height": 11,
+  "pixelRatio": 1,
+  "width": 14,
+  "x": 416,
+  "y": 88
+ },
+ "shelter": {
+  "height": 19,
+  "pixelRatio": 1,
+  "width": 20,
+  "x": 198,
+  "y": 88
+ },
+ "sinkhole": {
+  "height": 12,
+  "pixelRatio": 1,
+  "width": 14,
+  "x": 360,
+  "y": 88
+ },
+ "spring": {
+  "height": 14,
+  "pixelRatio": 1,
+  "width": 14,
+  "x": 276,
+  "y": 88
+ },
+ "station": {
+  "height": 18,
+  "pixelRatio": 1,
+  "width": 18,
+  "x": 240,
+  "y": 88
+ },
+ "supermarket": {
+  "height": 32,
+  "pixelRatio": 1,
+  "width": 32,
+  "x": 340,
+  "y": 54
+ },
  "survey_point": {
   "height": 14,
   "pixelRatio": 1,
   "width": 18,
-  "x": 268,
+  "x": 292,
   "y": 88
  },
  "swimming": {
   "height": 12,
   "pixelRatio": 1,
   "width": 22,
-  "x": 352,
+  "x": 376,
   "y": 88
  },
  "tower": {
@@ -346,14 +353,14 @@
   "height": 24,
   "pixelRatio": 1,
   "width": 18,
-  "x": 434,
+  "x": 468,
   "y": 54
  },
  "tree_needleleaved": {
   "height": 24,
   "pixelRatio": 1,
   "width": 14,
-  "x": 454,
+  "x": 488,
   "y": 54
  },
  "viewpoint": {
@@ -367,7 +374,7 @@
   "height": 12,
   "pixelRatio": 1,
   "width": 14,
-  "x": 376,
+  "x": 400,
   "y": 88
  },
  "water_tower": {
@@ -381,35 +388,35 @@
   "height": 14,
   "pixelRatio": 1,
   "width": 14,
-  "x": 288,
+  "x": 312,
   "y": 88
  },
  "waterfall": {
   "height": 10,
   "pixelRatio": 1,
   "width": 14,
-  "x": 452,
+  "x": 476,
   "y": 88
  },
  "watermill": {
   "height": 22,
   "pixelRatio": 1,
   "width": 22,
-  "x": 24,
+  "x": 48,
   "y": 88
  },
  "wayside_cross": {
   "height": 20,
   "pixelRatio": 1,
   "width": 18,
-  "x": 132,
+  "x": 156,
   "y": 88
  },
  "wilderness_hut": {
   "height": 20,
   "pixelRatio": 1,
   "width": 20,
-  "x": 152,
+  "x": 176,
   "y": 88
  },
  "wind_turbine": {

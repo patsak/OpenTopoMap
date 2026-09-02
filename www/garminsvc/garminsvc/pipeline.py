@@ -20,7 +20,7 @@ from garminsvc.constants import (
     ROOT,
     STYLE_DIR,
 )
-from garminsvc.proc import check_cancelled, run, worker_count
+from otmlib.proc import check_cancelled, run, worker_count
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,8 @@ class BuildContext:
     bounds_dir: Optional[Path] = None
     split_dir: Optional[Path] = None
     source_pbf: Optional[Path] = None
+    # Glacier-only extract (ice, crevasses, moraines) clipped to the build bbox.
+    glacier_pbf: Optional[Path] = None
     contour_area: str = ""
     contours_dir: Optional[Path] = None
     ridges_osm: Optional[Path] = None
@@ -211,16 +213,16 @@ def build_ridges(ctx: BuildContext) -> None:
 
 
 def build_crevasse_stripes(ctx: BuildContext) -> None:
-    src = ctx.source_pbf or ctx.pbf_input
+    src = ctx.glacier_pbf
     if src is None or not src.is_file():
-        log.warning("No source PBF for crevasse stripes — skipping")
+        log.warning("No glacier PBF for crevasse stripes — skipping")
         ctx.crevasse_osm = None
         return
-    from garminsvc.crevasse import build_crevasse_stripes as _build
+    from otmlib.crevasse import build_crevasse_stripes as _build
 
     log.info("Crevasse hatch perpendicular to glacier flow: %s", src)
     out = ctx.data_dir / "crevasse-stripes.osm"
-    ctx.crevasse_osm = _build(src, out)
+    ctx.crevasse_osm = _build(src, out, prefiltered=True)
     if ctx.crevasse_osm:
         log.info("Crevasse stripes: %s", ctx.crevasse_osm)
     else:
@@ -228,7 +230,7 @@ def build_crevasse_stripes(ctx: BuildContext) -> None:
 
 
 def _outside_bbox(pbf: Path, area: str) -> bool:
-    from garminsvc.osm_areas import pbf_bbox
+    from otmlib.osm_areas import pbf_bbox
 
     try:
         west, south, east, north = (float(x) for x in area.split(":"))
@@ -265,7 +267,7 @@ def _generate_contours(dem: str, out_dir: str, step: int, start_id: int, prefix:
 
 
 def build_contour_pbfs(ctx: BuildContext) -> None:
-    from garminsvc.contour_terrain import contour_step
+    from otmlib.contour_terrain import contour_step
 
     contours = ctx.data_dir / "contours-hike"
     contours.mkdir(parents=True, exist_ok=True)
@@ -330,10 +332,9 @@ def build_contour_pbfs(ctx: BuildContext) -> None:
 
     ctx.contours_dir = contours
 
-    from garminsvc.contour_post import postprocess_contour_pbfs
+    from otmlib.contour_post import postprocess_contour_pbfs
 
-    osm_src = ctx.source_pbf or ctx.pbf_input
-    postprocess_contour_pbfs(kept, osm_src, dem_files)
+    postprocess_contour_pbfs(kept, ctx.glacier_pbf, dem_files)
 
 
 def build_main_map(ctx: BuildContext) -> None:
@@ -355,15 +356,15 @@ def build_main_map(ctx: BuildContext) -> None:
 
     cmd = [
         "java",
-        f"-Xmx{ctx.java_mem}",  # heap JVM
+        f"-Xmx{ctx.java_mem}",
         "-jar",
         str(ctx.mkgmap_jar),
         "-c",  # общие опции mkgmap (gmapsupp, index, routing, …)
         str(OPTIONS_MAIN),
-        f"--style-file={STYLE_DIR / 'opentopomap-hike'}",  # правила OSM → Garmin
-        f"--precomp-sea={ctx.sea_dir}",  # полигоны моря
+        f"--style-file={STYLE_DIR / 'opentopomap-hike'}",
+        f"--precomp-sea={ctx.sea_dir}",
         f"--bounds={ctx.bounds_dir}",  # административные границы / адреса
-        f"--dem={ctx.hgt_dir}",  # SRTM .hgt для рельефа
+        f"--dem={ctx.hgt_dir}",
         f"--dem-dists={DEM_DISTS}",  # шаг DEM по уровням zoom (метры)
         "--show-profiles=1",  # профили высот на устройстве
         "--gmapi",  # каталог .gmap для BaseCamp
@@ -417,7 +418,7 @@ def build_contours_map(ctx: BuildContext) -> None:
     run(
         [
             "java",
-            f"-Xmx{ctx.java_mem}",  # heap JVM
+            f"-Xmx{ctx.java_mem}",
             "-jar",
             str(ctx.mkgmap_jar),
             "-c",  # опции изолиний (без routing/index основной карты)
@@ -433,7 +434,7 @@ def build_contours_map(ctx: BuildContext) -> None:
             "--gmapi",  # каталог .gmap для BaseCamp
             f"--output-dir={out}",
             *[str(p) for p in contour_files],
-            *extras,  # ridges.osm, если собран
+            *extras,
             str(contours_typ),
         ]
     )

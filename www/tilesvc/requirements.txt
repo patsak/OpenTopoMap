@@ -1,0 +1,8 @@
+PyYAML>=6.0
+# otmlib.geofabrik reads region polygons out of Geofabrik's index-v1.json.
+shapely>=2.0
+# huey's Postgres backend requires psycopg 3.2 or newer.
+psycopg[binary]>=3.2
+# The preview worker consumes its own queue in the same Postgres; the producer
+# is garminsvc (see otmlib.previewqueue). PostgresHuey landed in huey 3.
+huey>=3.0

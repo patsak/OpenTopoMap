@@ -1,11 +1,9 @@
 # Building a custom Garmin map - a complete walkthrough
 
-Based on the [HOWTO](HOWTO) this guide describes how to create a custom Garmin map
-using OpenTopoMap styles.
+This guide describes how to create a custom Garmin map using OpenTopoMap styles.
 
-The interactive bbox build service (formerly `garmin/mapsvc`) now lives in
-[`www/garminsvc`](../www/garminsvc). This directory keeps the manual walkthrough
-and screenshots.
+The interactive bbox build service lives in [`www/garminsvc`](../www/garminsvc).
+This directory keeps the manual walkthrough, styles, and screenshots.
 
 ## Required tools & OpenTopoMap repository
 
@@ -76,13 +74,13 @@ DATA="$(pwd)/6324*.pbf"
 
 popd > /dev/null
 
-OPTIONS="$(pwd)/opentopomap_options"
-STYLEFILE="$(pwd)/style/opentopomap"
+OPTIONS="$(pwd)/opentopomap_hike_options"
+STYLEFILE="$(pwd)/style/opentopomap-hike"
 
 pushd style/typ > /dev/null
 
-java -jar $MKGMAPJAR --family-id=35 OpenTopoMap.txt
-TYPFILE="$(pwd)/OpenTopoMap.typ"
+java -jar $MKGMAPJAR --family-id=6324 opentopomap-hike.txt
+TYPFILE="$(pwd)/opentopomap-hike.typ"
 
 popd > /dev/null
 

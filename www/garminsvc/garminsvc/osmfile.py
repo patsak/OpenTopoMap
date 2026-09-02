@@ -8,7 +8,7 @@ from pathlib import Path
 import npyosmium as osmium
 
 from garminsvc.constants import MAX_UPLOAD_BYTES
-from garminsvc.proc import run
+from otmlib.proc import run
 
 ALLOWED_SUFFIXES = (
     ".osm.pbf",

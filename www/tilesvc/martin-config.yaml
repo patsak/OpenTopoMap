@@ -1,0 +1,19 @@
+# Martin serves the prebuilt tilesets. URLs: /otm/{z}/{x}/{y}, /otm-ocean/{z}/{x}/{y}
+#
+# The files are written by the tilesvc job (tilemaker) into the shared data
+# volume and mounted here read-only. Each is replaced by an atomic rename, so
+# Martin never sees a half-written tileset - the worst case is that it keeps
+# serving the previous file until it reopens the new one.
+#
+# In-memory cache: a tile request is now an SQLite lookup in the mbtiles file
+# rather than a PostGIS ST_AsMVT run, so the cache only saves page-cache
+# lookups and decompression - a modest budget is enough, and none of the
+# tile_size_mb / expiry tuning the PostGIS setup needed applies. size_mb is a
+# total Martin splits across its tile / pmtiles-directory / sprite / font
+# caches; only the tile share is used here.
+cache:
+  size_mb: ${OTM_MARTIN_CACHE_MB:-256}
+mbtiles:
+  sources:
+    otm: /tiles/otm.mbtiles
+    otm-ocean: /tiles/otm-ocean.mbtiles

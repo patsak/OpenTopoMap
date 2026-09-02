@@ -5,12 +5,32 @@
 #
 # Готовый образ с master: ghcr.io/patsak/opentopomap-garminsvc:latest
 #
-# Стили и *_options лежат в ../../garmin/ (и пекутся в образ; ниже ещё
-# bind-mount для правок без пересборки).
-# Кэш Geofabrik/DEM, SQLite-джобы, sea/bounds — в ./data
-# Векторные тайлы подложки раздаёт Martin (сервис tiles), не Flask.
+# Тайлы собираются заранее: tilesvc-job держит PBF регионов свежими и строит
+# otm.mbtiles / otm-ocean.mbtiles через tilemaker, Martin отдаёт эти файлы.
+# garminsvc режет bbox из тех же PBF через osmium. Postgres хранит только
+# метаданные (последняя применённая osc.gz, состав регионов, ревизии сборок) и
+# задачи garminsvc.
 
 services:
+  # Plain Postgres: nothing here stores geometry any more (region coverage is
+  # four floats, see www/tilesvc/sql/001_schema.sql), and no query renders a
+  # tile - so no PostGIS, and none of the shared_buffers / shm_size / prewarm
+  # tuning that a per-request ST_AsMVT pipeline needed.
+  postgres:
+    image: ${OTM_POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: otm
+      POSTGRES_PASSWORD: otm
+      POSTGRES_DB: otm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U otm -d otm"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   garminsvc:
     build:
       context: ../..
@@ -26,18 +46,23 @@ services:
       OTM_GARMIN_DIR: /garmin
       OTM_VENV_PYTHON: /opt/otm-venv/bin/python
       JAVA_MEM: ${JAVA_MEM:-4g}
-      # Browser talks to Martin on the published host port, not the docker network name.
-      OTM_MARTIN_PUBLIC_URL: "${OTM_MARTIN_PUBLIC_URL:-http://127.0.0.1:3000}"
+      OTM_DATA_DIR: /app/data
+      DATABASE_URL: postgresql://otm:otm@postgres:5432/otm
+      # Where the browser reads built previews from - the nginx below, not a
+      # path inside the container.
+      OTM_PREVIEW_PUBLIC_URL: "${OTM_PREVIEW_PUBLIC_URL:-http://127.0.0.1:8081}"
     volumes:
       - ./data:/app/data
-      # Live style/options from the checkout (overrides the copy baked into the image).
+      - ../otmlib:/app/otmlib:ro
       - ../../garmin/style:/garmin/style:ro
       - ../../garmin/opentopomap_hike_options:/garmin/opentopomap_hike_options:ro
       - ../../garmin/contours_hike_options:/garmin/contours_hike_options:ro
-      # MapLibre-стиль векторной подложки: вне build-контекста сервиса.
       - ../../vector/maplibregljs:/app/vector/maplibregljs:ro
     depends_on:
-      - tiles
+      postgres:
+        condition: service_healthy
+      tiles:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
@@ -46,13 +71,99 @@ services:
       retries: 5
       start_period: 900s
 
+  # Расписание: Geofabrik → osmium apply-changes → tilemaker → mbtiles.
+  # Ручной прогон:
+  #   docker compose run --rm tilesvc-job python -m tilesvc
+  tilesvc-job:
+    build:
+      context: ../..
+      dockerfile: www/tilesvc/Dockerfile
+    image: ghcr.io/patsak/opentopomap-tilesvc:latest
+    working_dir: /app
+    command: ["supercronic", "/app/tilesvc/crontab"]
+    # tilemaker is the memory-hungry step: it holds the tile it is writing plus
+    # index windows over the node/way store, and osmium merge/apply-changes
+    # stream whole federal-district PBFs alongside. Uncapped, a bad run exhausts
+    # the Colima VM and takes the Docker daemon with it; capped, the container's
+    # own OOM killer ends the job and the host survives. --store keeps the bulk
+    # of tilemaker's working set on disk (see tilemaker.py), which is what makes
+    # a few GB enough here at all.
+    mem_limit: ${OTM_TILESVC_MEM:-6g}
+    environment:
+      OTM_DATA_DIR: /app/data
+      DATABASE_URL: postgresql://otm:otm@postgres:5432/otm
+      OTM_TILEMAKER_THREADS: ${OTM_TILEMAKER_THREADS:-2}
+    volumes:
+      - ./data:/app/data
+      - ../../vector/tilemaker:/app/vector/tilemaker:ro
+      - ../tilesvc:/app/tilesvc:ro
+      - ../otmlib:/app/otmlib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+
+  # Превью области по кнопке: своя очередь (otmlib.previewqueue), поэтому оно не
+  # ждёт за многочасовой сборкой .img в очереди garminsvc. Образ тот же, что у
+  # tilesvc-job — там уже есть tilemaker и osmium.
+  #   docker compose logs -f tilesvc-preview
+  tilesvc-preview:
+    build:
+      context: ../..
+      dockerfile: www/tilesvc/Dockerfile
+    image: ghcr.io/patsak/opentopomap-tilesvc:latest
+    working_dir: /app
+    command: ["python", "-m", "tilesvc.preview"]
+    # One bbox at a time, and a bbox is a fraction of a region - so a fraction
+    # of what the nightly full build needs.
+    mem_limit: ${OTM_PREVIEW_MEM:-4g}
+    environment:
+      OTM_DATA_DIR: /app/data
+      DATABASE_URL: postgresql://otm:otm@postgres:5432/otm
+      OTM_TILEMAKER_THREADS: ${OTM_TILEMAKER_THREADS:-2}
+    volumes:
+      - ./data:/app/data
+      - ../../vector/tilemaker:/app/vector/tilemaker:ro
+      - ../tilesvc:/app/tilesvc:ro
+      - ../otmlib:/app/otmlib:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Раздача готовых превью: один .pmtiles на область, браузер читает его
+  # range-запросами. nginx отдаёт статику с Range из коробки - Martin здесь не
+  # подходит, он открывает тайлсеты из конфига на старте и новый файл без
+  # перезапуска не увидит.
+  previews:
+    image: ${OTM_NGINX_IMAGE:-nginx:1.27-alpine}
+    volumes:
+      - ./previews-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./data/previews:/srv/previews:ro
+    ports:
+      - "${OTM_PREVIEW_PORT:-8081}:80"
+    restart: unless-stopped
+
+  # Martin opens the mbtiles files it was configured with at startup, so on a
+  # fresh stack it crash-loops (harmlessly, thanks to the restart policy) until
+  # the first tilesvc-job run has produced them - and it must be restarted to
+  # pick up a rebuilt tileset:
+  #   docker compose restart tiles
+  # The nightly job logs a reminder when it has rebuilt one.
   tiles:
     image: ghcr.io/maplibre/martin
-    # Each .mbtiles in data/vector-tiles becomes /{stem}/{z}/{x}/{y}.
-    # CORS is enabled by default, so the picker on :8080 can fetch from :3000.
-    command: ["/data"]
+    command: ["--config", "/config/martin-config.yaml"]
+    environment:
+      # Modest in-memory cache: a tile is now a lookup in the mbtiles file, not
+      # a PostGIS render, so there is little left to cache away.
+      OTM_MARTIN_CACHE_MB: "${OTM_MARTIN_CACHE_MB:-256}"
     volumes:
-      - ./data/vector-tiles:/data:ro
+      - ../tilesvc/martin-config.yaml:/config/martin-config.yaml:ro
+      - ./data/vector-tiles:/tiles:ro
     ports:
       - "${OTM_MARTIN_PORT:-3000}:3000"
     restart: unless-stopped
+
+volumes:
+  postgres_data:

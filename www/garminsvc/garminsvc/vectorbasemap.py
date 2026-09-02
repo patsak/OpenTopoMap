@@ -1,12 +1,11 @@
-"""The MapLibre vector map served as a basemap for the bbox picker.
+"""What the picker needs to draw a map in the OpenTopoMap style.
 
-garminsvc builds Garmin images in the opentopomap-hike style, and vector/ renders the
-same cartography for the browser. Offering it in the picker lets a user see on screen
-what the build will put on the device, over exactly the area being selected.
-
-Tiles are not proxied through Flask: they come from Martin (or any other tile server)
-named by OTM_VECTOR_TILES_URL / OTM_MARTIN_PUBLIC_URL. Style assets stay here because
-they are small and versioned with the picker.
+Not a basemap any more: the public raster maps in the picker's dropdown are the
+browser's business, and the one OTM-styled layer the service can offer is a
+preview of the drawn bbox (see :mod:`otmlib.previews`). What is left here is
+everything that preview needs on top of its own tiles — the MapLibre style
+assets, the DEM the hillshade and contours are drawn from, and where nginx
+publishes the built ``.pmtiles``.
 """
 
 from __future__ import annotations
@@ -14,81 +13,79 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from garminsvc.constants import VECTOR_STYLE_DIRS, VECTOR_TILES_DIR
+from garminsvc.constants import VECTOR_STYLE_DIRS
 
 URL_PREFIX = "/vector"
 ASSETS_URL = f"{URL_PREFIX}/assets"
-BASE_SET = "otm"
-CONTOUR_SET = "otm-contours"
 LAYERS_ASSET = "otm_layers.json"
 STYLE_ASSET = "otm_style.js"
 SPRITE_ASSET = "otm_sprite"
 
+MAP_NAME = "Превью области"
 MAP_ATTRIBUTION = "Map style: © OpenTopoMap, Map data © OpenStreetMap contributors"
-CONTOUR_ATTRIBUTION = "Contours: © OpenTopoMap"
-DEFAULT_MAXZOOM = 14
-# Browser-facing base URL of Martin (or another MVT server). Inside Docker Compose the
-# tiles service publishes this port on the host; the picker talks to it directly.
-DEFAULT_MARTIN_PUBLIC_URL = "http://127.0.0.1:3000"
+DEM_ATTRIBUTION = "DEM: © Mapterhorn"
+DEFAULT_DEM_MAXZOOM = 12
+DEFAULT_DEM_TILESIZE = 512
+DEFAULT_DEM_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"
+# Where the previews directory is published. The browser reads the .pmtiles
+# with range requests, so this has to be a URL it can reach directly - not a
+# path inside the container.
+DEFAULT_PREVIEW_PUBLIC_URL = "http://127.0.0.1:8081"
 
 
 def style_dir() -> Path | None:
-    """First location holding the MapLibre style, or None if the assets are missing."""
     for candidate in VECTOR_STYLE_DIRS:
         if (candidate / LAYERS_ASSET).is_file() and (candidate / STYLE_ASSET).is_file():
             return candidate
     return None
 
 
-def _tileset_file(name: str) -> Path | None:
-    path = VECTOR_TILES_DIR / f"{name}.mbtiles"
-    return path if path.is_file() else None
+def _public_url(env_var: str, default: str) -> str:
+    return (os.environ.get(env_var, "").strip() or default).rstrip("/")
 
 
-def _martin_public_url() -> str:
-    return os.environ.get("OTM_MARTIN_PUBLIC_URL", DEFAULT_MARTIN_PUBLIC_URL).rstrip("/")
+def preview_tiles_url(tiles_file: str) -> str:
+    """Absolute URL of one built preview file."""
+    base = _public_url("OTM_PREVIEW_PUBLIC_URL", DEFAULT_PREVIEW_PUBLIC_URL)
+    return f"{base}/{tiles_file}"
 
 
-def _martin_tiles_url(name: str) -> str:
-    # Martin exposes each .mbtiles file as /{stem}/{z}/{x}/{y}.
-    return f"{_martin_public_url()}/{name}/{{z}}/{{x}}/{{y}}"
+def _map_center() -> dict:
+    """Initial view, from the regions currently configured.
+
+    Imported lazily and behind a catch-all: an absent or still-booting Postgres
+    should cost the picker its opening position, not the whole map.
+    """
+    try:
+        from otmlib.pgmeta import coverage_center
+
+        return coverage_center()
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def config() -> dict:
-    """What the picker needs to build the style, or {"available": False}."""
+    """Everything the page needs before it can show a preview."""
     assets = style_dir()
     if assets is None:
         return {"available": False, "reason": "no MapLibre style found"}
 
-    remote = os.environ.get("OTM_VECTOR_TILES_URL", "").strip()
-    local = _tileset_file(BASE_SET)
-    if remote:
-        source = {"tiles": remote, "maxzoom": DEFAULT_MAXZOOM}
-        name = "OpenTopoMap (вектор)"
-    elif local is not None:
-        # Local mbtiles are served by Martin from data/vector-tiles/, not by Flask.
-        source = {"tiles": _martin_tiles_url(BASE_SET), "maxzoom": DEFAULT_MAXZOOM}
-        name = "OpenTopoMap (вектор, локальные тайлы)"
-    else:
-        return {"available": False, "reason": "no vector tiles"}
+    dem = {
+        "tiles": os.environ.get("OTM_DEM_URL", "").strip() or DEFAULT_DEM_URL,
+        "maxzoom": DEFAULT_DEM_MAXZOOM,
+        "tileSize": DEFAULT_DEM_TILESIZE,
+        "encoding": "terrarium",
+        "attribution": DEM_ATTRIBUTION,
+    }
 
-    remote_contours = os.environ.get("OTM_VECTOR_CONTOURS_URL", "").strip()
-    local_contours = _tileset_file(CONTOUR_SET)
-    contours = None
-    if remote_contours:
-        contours = {"tiles": remote_contours, "maxzoom": DEFAULT_MAXZOOM}
-    elif local_contours is not None:
-        contours = {"tiles": _martin_tiles_url(CONTOUR_SET), "maxzoom": DEFAULT_MAXZOOM}
-    if contours is not None:
-        contours["attribution"] = CONTOUR_ATTRIBUTION
-
-    return {
+    result = {
         "available": True,
-        "name": name,
+        "name": MAP_NAME,
         "attribution": MAP_ATTRIBUTION,
-        "contours": contours,
+        "dem": dem,
         "layers": f"{ASSETS_URL}/{LAYERS_ASSET}",
         "style": f"{ASSETS_URL}/{STYLE_ASSET}",
         "sprite": f"{ASSETS_URL}/{SPRITE_ASSET}",
-        **source,
     }
+    result.update(_map_center())
+    return result

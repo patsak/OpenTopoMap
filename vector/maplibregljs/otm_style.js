@@ -1,75 +1,100 @@
 // Assembles the MapLibre style of the OpenTopoMap vector map.
 //
-// Two pages need that style: the standalone viewer (index.html) and the bbox picker
-// of the Garmin build service (garmin/static/app.js), which shows the same map the
-// build will put on the device. Sources, contour thresholds and sprite wiring live
-// here so the two cannot drift apart.
+// Its consumer is the bbox picker of the Garmin build service
+// (www/garminsvc/static/app.js), which shows the same map the build will put on
+// the device. Sources, contour thresholds and sprite wiring live here rather
+// than in the page, so another consumer gets them for free.
 //
-// Load after maplibre-gl.js, maplibre-contour and otm_layers.json.
+// Load after maplibre-gl.js, maplibre-contour (mlcontour) and otm_layers.json.
 
+// Mapterhorn terrarium tiles. MapLibre draws hillshade from them directly;
+// maplibre-contour turns the same tiles into isolines in the browser.
 var OTM_DEM = {
-	url: "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp",
+	tiles: "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp",
 	encoding: "terrarium",
-	maxzoom: 15,
-	attribution: "DEM: © mapterhorn.com",
+	maxzoom: 12,
+	tileSize: 512,
+	attribution: "DEM: © Mapterhorn",
 };
 
-// Contour intervals follow the Genshtab hierarchy: thin every 10/20 m, medium every
-// 50 m, thick every 100 m. The 50/100 m split is done by the style from the
-// elevation value, so only minor/major thresholds are configured here.
-var OTM_CONTOUR_THRESHOLDS = {
-	10: [100, 500],
-	11: [50, 200],
-	12: [20, 100],
-	13: [20, 100],
-	14: [10, 100],
-	15: [10, 50],
+// Mirrors otmlib.constants.CONTOUR_MINZOOM / CONTOUR_MAXZOOM. Below the floor
+// the ridge lines carry the relief (see the ridge-lines layer).
+var OTM_CONTOURS = {
+	minzoom: 12,
+	maxzoom: 14,
 };
 
-var otmDemSourceInstance = null;
-
-// One DemSource per page: it registers a protocol handler on maplibregl, and a
-// second one would fight the first over the same protocol name.
-function otmDemSource() {
-	if (!otmDemSourceInstance) {
-		otmDemSourceInstance = new mlcontour.DemSource({
-			url: OTM_DEM.url,
-			encoding: OTM_DEM.encoding,
-			maxzoom: OTM_DEM.maxzoom,
-			worker: true, // offload isoline computation to a web worker to reduce jank
-			cacheSize: 100, // number of most-recent tiles to cache
-			timeoutMs: 10_000, // timeout on fetch requests
-		});
-		otmDemSourceInstance.setupMaplibre(maplibregl);
+// Genshtab interval on the web map: 20 m isolines, index every 100 m. maplibre-contour
+// has no terrain classifier, so this is the mountain step everywhere.
+function otmContourThresholds() {
+	var thresholds = {};
+	for (var z = OTM_CONTOURS.minzoom; z <= OTM_CONTOURS.maxzoom; z++) {
+		thresholds[z] = [20, 100];
 	}
-	return otmDemSourceInstance;
+	return thresholds;
+}
+
+function otmDemSource(options) {
+	if (typeof mlcontour === "undefined") {
+		throw new Error("otmVectorStyle: maplibre-contour (mlcontour) is required");
+	}
+	if (typeof maplibregl === "undefined") {
+		throw new Error("otmVectorStyle: maplibre-gl is required");
+	}
+	var dem = options || {};
+	var source = new mlcontour.DemSource({
+		url: dem.tiles || OTM_DEM.tiles,
+		encoding: dem.encoding || OTM_DEM.encoding,
+		maxzoom: dem.maxzoom || OTM_DEM.maxzoom,
+		worker: true,
+	});
+	source.setupMaplibre(maplibregl);
+	return source;
 }
 
 // options:
-//   tiles       vector tile URL template (required)
+//   tiles       vector tile URL template (required unless url is given)
+//   url         TileJSON-or-protocol URL of the tileset, e.g.
+//               "pmtiles://https://host/area.pmtiles"; wins over tiles, and is
+//               what the bbox preview uses - one file, read with range requests
+//   minzoom     lowest zoom in the tileset, default 0
 //   maxzoom     highest zoom in the tileset, default 14
 //   bounds      [w, s, e, n] coverage, keeps MapLibre from asking for missing tiles
 //   attribution credit line for the vector source
-//   contours    {tiles, maxzoom, attribution} for a served contour tileset; without
-//               it isolines are computed in the browser from the DEM
+//   ocean       {tiles, maxzoom} water-polygon tileset; omitted, the vector tiles
+//               are used (the full worldwide profile embeds the ocean layer)
+//   dem         {tiles, maxzoom, encoding, tileSize, attribution} Mapterhorn by default
 //   sprite      absolute sprite URL, default "otm_sprite" next to the page
 //   layers      layer list, default the otm_layers global from otm_layers.json
 //   globe       vertical-perspective projection at low zoom, default true; must be
 //               false when the map is embedded in Leaflet, which is Mercator-only
 function otmVectorStyle(options) {
 	var opts = options || {};
-	var dem = otmDemSource();
+	if (!opts.tiles && !opts.url) {
+		throw new Error("otmVectorStyle: opts.tiles or opts.url is required");
+	}
+	var demOpts = opts.dem || {};
+	var demSource = otmDemSource(demOpts);
 	var vector = {
 		type: "vector",
 		lineMetrics: true,
-		tiles: [opts.tiles],
-		maxzoom: opts.maxzoom || 14,
 		attribution:
 			opts.attribution ||
 			"Map style: © OpenTopoMap, Map data © OpenStreetMap contributors",
 	};
-	if (opts.bounds) {
-		vector.bounds = opts.bounds;
+	if (opts.url) {
+		// A pmtiles:// URL carries its own zoom range and bounds in the file
+		// header, so MapLibre reads them from there rather than from options.
+		vector.url = opts.url;
+	} else {
+		vector.tiles = [opts.tiles];
+		vector.maxzoom = opts.maxzoom || 14;
+		if (opts.minzoom) {
+			vector.minzoom = opts.minzoom;
+		}
+		if (opts.bounds) {
+			vector.bounds = opts.bounds;
+		}
 	}
 	return {
 		version: 8,
@@ -85,42 +110,42 @@ function otmVectorStyle(options) {
 					},
 		sources: {
 			"opentopomap-vector": vector,
-			dem: {
-				type: "raster-dem",
-				encoding: OTM_DEM.encoding,
-				tiles: [dem.sharedDemProtocolUrl],
-				maxzoom: OTM_DEM.maxzoom,
-				tileSize: 512,
-				attribution: OTM_DEM.attribution,
-			},
-			"contour-source": opts.contours
+			// Regional tilesets have no shapefile ocean; the job publishes it
+			// separately. A full tileset already has the layer, so the same URL works.
+			// A copy rather than `vector` itself: MapLibre resolves a source
+			// spec in place, and two ids sharing one object leave the second
+			// one waiting for a resolution that already happened.
+			"opentopomap-ocean": opts.ocean
 				? {
 						type: "vector",
-						tiles: [opts.contours.tiles],
-						maxzoom: opts.contours.maxzoom || 14,
-						attribution: opts.contours.attribution || "Contours: © OpenTopoMap",
+						tiles: [opts.ocean.tiles],
+						maxzoom: opts.ocean.maxzoom || opts.maxzoom || 14,
 					}
-				: // Isolines computed in the browser. They carry no on_glacier/steep
-					// attributes, so glacier contours stay brown and steep slopes keep
-					// their thick major lines; a served tileset from
-					// tools/build_contours.py gets the full Garmin behaviour.
-					{
-						type: "vector",
-						tiles: [
-							dem.contourProtocolUrl({
-								multiplier: 1,
-								thresholds: OTM_CONTOUR_THRESHOLDS,
-								contourLayer: "contours",
-								elevationKey: "ele",
-								levelKey: "level",
-								extent: 4096,
-								buffer: 1,
-							}),
-						],
-						maxzoom: OTM_DEM.maxzoom,
-					},
+				: { ...vector },
+			dem: {
+				type: "raster-dem",
+				encoding: demOpts.encoding || OTM_DEM.encoding,
+				tiles: [demSource.sharedDemProtocolUrl],
+				maxzoom: demOpts.maxzoom || OTM_DEM.maxzoom,
+				tileSize: demOpts.tileSize || OTM_DEM.tileSize,
+				attribution: demOpts.attribution || OTM_DEM.attribution,
+			},
+			"contour-source": {
+				type: "vector",
+				tiles: [
+					demSource.contourProtocolUrl({
+						thresholds: otmContourThresholds(),
+						contourLayer: "contours",
+						elevationKey: "ele",
+						levelKey: "level",
+					}),
+				],
+				minzoom: OTM_CONTOURS.minzoom,
+				maxzoom: OTM_CONTOURS.maxzoom,
+				attribution: "Contours: © Mapterhorn",
+			},
 		},
-		glyphs: opts.glyphs || "https://fonts.undpgeohub.org/fonts/{fontstack}/{range}.pbf",
+		glyphs: opts.glyphs || "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
 		// MapLibre requires an absolute sprite URL, so resolve it against the page
 		sprite: opts.sprite || new URL("otm_sprite", document.baseURI).href,
 		layers: opts.layers || otm_layers,

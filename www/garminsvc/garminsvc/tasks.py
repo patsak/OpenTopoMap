@@ -1,13 +1,15 @@
-"""Huey tasks. Queue is a separate SQLite file from job records."""
+"""Huey tasks. The queue lives in Postgres, alongside the job records."""
 
 from __future__ import annotations
 
-from huey import SqliteHuey
+from huey import PostgresHuey
 
-from garminsvc.constants import DATA_DIR, HUEY_DB
+from otmlib import pg
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-huey = SqliteHuey(name="garminsvc", filename=str(HUEY_DB), results=False)
+# huey's own psycopg3 backend: it creates its huey_* tables itself and blocks on
+# LISTEN/NOTIFY for the next task instead of polling. results=False because the
+# task returns nothing - progress and outcome are read from otm_garmin.jobs.
+huey = PostgresHuey(name="garminsvc", dsn=pg.database_url(), results=False)
 
 
 @huey.task()

@@ -38,33 +38,37 @@ RUN python3 -m venv --system-site-packages /opt/otm-venv \
     && /opt/otm-venv/bin/pip install --no-cache-dir -r /app/requirements-server.txt
 
 COPY www/garminsvc/ /app/
+# Shared with tilesvc; a plain package next to garminsvc, no install step.
+COPY www/otmlib /app/otmlib
 # Cartography stays under garmin/; bake the bits the service needs into the image.
 COPY garmin/style /garmin/style
 COPY garmin/opentopomap_hike_options /garmin/opentopomap_hike_options
 COPY garmin/contours_hike_options /garmin/contours_hike_options
 
+# Both distributions are installed whole, from the pinned versions above: the jars
+# declare their dependencies through a manifest Class-Path pointing at a sibling
+# lib/, so a jar on its own is not a usable tool. Nothing here reads the working
+# tree — the image an ARG describes must not depend on what a checkout happens to
+# contain (see .dockerignore).
 RUN mkdir -p /app/tools \
-    && if [ ! -f /app/tools/mkgmap.jar ]; then \
-         jar="$(find /app/tools -name mkgmap.jar 2>/dev/null | head -1)"; \
-         if [ -n "$jar" ]; then ln -sfn "$jar" /app/tools/mkgmap.jar; \
-         else \
-           curl --retry 5 --retry-all-errors -fsSL -o /tmp/mkgmap.zip \
-             "https://www.mkgmap.org.uk/download/${MKGMAP_VERSION}.zip" \
-           && unzip -q /tmp/mkgmap.zip -d /app/tools \
-           && ln -sfn "/app/tools/${MKGMAP_VERSION}/mkgmap.jar" /app/tools/mkgmap.jar \
-           && rm -f /tmp/mkgmap.zip; \
-         fi; \
-       fi \
-    && if ! find /app/tools -name splitter.jar 2>/dev/null | grep -q .; then \
-           curl --retry 5 --retry-all-errors -fsSL -o /tmp/splitter.zip \
-             "https://www.mkgmap.org.uk/download/${SPLITTER_VERSION}.zip" \
-           && unzip -q /tmp/splitter.zip -d /app/tools \
-           && rm -f /tmp/splitter.zip; \
-       fi \
-    && ln -sfn "$(find /app/tools -name splitter.jar | head -1)" /app/tools/splitter.jar \
-    && test -f /app/tools/mkgmap.jar \
-    && test -e /app/tools/splitter.jar \
+    && curl --retry 5 --retry-all-errors -fsSL -o /tmp/mkgmap.zip \
+         "https://www.mkgmap.org.uk/download/${MKGMAP_VERSION}.zip" \
+    && unzip -q /tmp/mkgmap.zip -d /app/tools \
+    && ln -sfn "/app/tools/${MKGMAP_VERSION}/mkgmap.jar" /app/tools/mkgmap.jar \
+    && curl --retry 5 --retry-all-errors -fsSL -o /tmp/splitter.zip \
+         "https://www.mkgmap.org.uk/download/${SPLITTER_VERSION}.zip" \
+    && unzip -q /tmp/splitter.zip -d /app/tools \
+    && ln -sfn "/app/tools/${SPLITTER_VERSION}/splitter.jar" /app/tools/splitter.jar \
+    && rm -f /tmp/mkgmap.zip /tmp/splitter.zip \
     && test -d /garmin/style/opentopomap-hike \
+    # Smoke test, not a formality: a missing lib/ only surfaces once mkgmap reaches
+    # for fastutil, which happens after it has already written the .typ. Compiling
+    # the real TYP here is the same code path every build starts with.
+    && mkdir -p /tmp/typcheck \
+    && (cd /tmp/typcheck \
+        && java -jar /app/tools/mkgmap.jar --family-id=1 /garmin/style/typ/contours-hike.txt) \
+    && java -jar /app/tools/splitter.jar --version >/dev/null 2>&1 \
+    && rm -rf /tmp/typcheck \
     && chmod +x /app/docker-entrypoint.sh
 
 ENV PATH="/opt/otm-venv/bin:${PATH}" \

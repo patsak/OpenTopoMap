@@ -88,6 +88,7 @@ PATTERNS = {
     "0x4e": ["pattern-vineyard"],
     "0x11004": ["pattern-orchard"],
     "0x4f": ["pattern-scrub"],
+    "0x58": ["pattern-fell"],
     "0x1a": ["pattern-cemetery"],
     "0x55": ["pattern-sand"],
     "0x56": ["pattern-scree"],

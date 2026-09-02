@@ -22,7 +22,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 STYLE = REPO / "vector/maplibregljs/otm_layers.json"
 SPRITE = REPO / "vector/maplibregljs/otm_sprite.json"
-CONFIG = REPO / "vector/tilemaker/tilemaker-config-otm.json"
+# The OSM tileset's layers. The ocean tileset is built from the same lua with
+# its own config, so both are read to get every source-layer the style may use.
+CONFIGS = (
+    REPO / "vector/tilemaker/tilemaker-config-otm-region.json",
+    REPO / "vector/tilemaker/tilemaker-config-otm-ocean.json",
+)
 TYP_FILES = [
     REPO / "garmin/style/typ/opentopomap-hike.txt",
     REPO / "garmin/style/typ/contours-hike.txt",
@@ -51,11 +56,18 @@ def load_style(path: Path):
         raise SystemExit(f"{path.name}: cannot parse style ({exc})")
 
 
-def tile_layers(config_path: Path) -> set[str]:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    names = set()
-    for name, spec in config["layers"].items():
-        names.add(spec.get("write_to", name))
+def tile_layers(*config_paths: Path) -> set[str]:
+    """Source-layers the given tilemaker configs emit.
+
+    ``write_to`` is what lands in the tile: a config entry named ``land_low``
+    writing to ``land`` is a zoom range of the ``land`` layer, not a layer of
+    its own, and the style only ever names the latter.
+    """
+    names: set[str] = set()
+    for path in config_paths:
+        config = json.loads(path.read_text(encoding="utf-8"))
+        for name, spec in config["layers"].items():
+            names.add(spec.get("write_to", name))
     return names
 
 
@@ -103,12 +115,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--style", type=Path, default=STYLE)
     parser.add_argument("--sprite", type=Path, default=SPRITE)
-    parser.add_argument("--config", type=Path, default=CONFIG)
+    parser.add_argument("--config", type=Path, action="append", default=None)
     args = parser.parse_args(argv)
 
+    configs = tuple(args.config) if args.config else CONFIGS
     layers = load_style(args.style)
     sprite = set(json.loads(args.sprite.read_text(encoding="utf-8")))
-    available = tile_layers(args.config)
+    available = tile_layers(*configs)
     palette = {
         colour.lower()
         for path in TYP_FILES
@@ -131,7 +144,10 @@ def main(argv=None):
         if source and source not in NON_TILE_SOURCES and not source_layer:
             errors.append(f"{lid}: vector layer without source-layer")
         if source_layer and source not in NON_TILE_SOURCES and source_layer not in available:
-            errors.append(f"{lid}: source-layer {source_layer!r} is not produced by {args.config.name}")
+            errors.append(
+                f"{lid}: source-layer {source_layer!r} is not produced by any of "
+                + ", ".join(path.name for path in configs)
+            )
 
         images: list[str] = []
         for prop in ("icon-image",):

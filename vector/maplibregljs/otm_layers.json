@@ -9,19 +9,21 @@
 //   paper       #F3E6C4 [0x4b]   built-up  #E8B09A [0x10]   building #2A2A2A [0x13]
 //   forest      #A8C888 / trees #3D6B2E [0x38 0x39 0x50]
 //   meadow      #DCECB8 / #8CB868 [0x17]   scrub #BCD4A0 / #5A8A42 [0x4f]
+//   mountain tundra #C8D0A0 / stipple #5A3318 + grass tufts #5A8A42 [0x58]
 //   farmland    #F3E6C4 / #C4A870 [0x1c]   sand  #F3E6C4 / #D4C060 [0x55]
 //   rock/scree/moraine #5A3318 [0x56 0x57 0x54 0x36]
 //   water       #9DD4E8 [0x32 0x3c] / lines and labels #2A6A9A [0x18 0x1f]
 //   glacier     #FFFFFF [0x4d] / crevasse #2A6A9A [0x34 0x35]
 //   roads       #C43C32 [0x01-0x03] / #E8B84A [0x04 0x08] / #F5E8C0 [0x05 0x06]
 //   trails      track #6B4423 [0x07 0x0a] / footpath and steps #000000 [0x16 0x13]
-//   contours    #C07848 / #A86038 / #8B4518 [0x20-0x22], on glaciers #2A6A9A [0x23-0x25]
+//   contours    #C07848 / #A86038 / #8B4518 [0x20-0x22]
 //
-// Data comes from tilemaker/process-otm.lua (source "opentopomap-vector"),
-// which adds moraines, leaf_type, summit and pass elevations, rtsa_scale and the
-// hiking POI set. Contours come from the client-side DEM isolines by default; a
-// server-side contour tileset with on_glacier/steep attributes is picked up
-// automatically because the colour expressions test for those attributes.
+// Data from tilemaker/process-otm.lua (source "opentopomap-vector"), which
+// extends the Geofabrik schema with moraines, leaf_type, summit and pass
+// elevations, rtsa_scale and the hiking POI set. The ocean comes from a second
+// tileset (source "opentopomap-ocean"), built from coastline shapefiles.
+// Contours are isolines that maplibre-contour draws from the Mapterhorn
+// raster-dem source in the browser.
 
 const otm_layers = [
 {
@@ -29,9 +31,44 @@ const otm_layers = [
 	"type": "background",
 	"paint": {"background-color": "#F3E6C4"}
 },
+
+// Hypsometric tint: OpenTopoMap's own low-zoom look (lowland green through
+// beige to brick-red with elevation), ported 1:1 from its Mapnik color ramp
+// (mapnik/relief_color_text_file.txt in der-stefan/OpenTopoMap). Sits below
+// every fill layer (forest, water, built-up...) so it only shows through
+// where nothing else covers the ground - exactly like the Mapnik version,
+// where this ramp is the base and landuse/water paint over it. Only matters
+// at small scale: fades out by z10, where forest/other landuse already
+// covers most of the visible ground and the Genshtab paper tone (plus
+// hillshade below) carries the relief instead, per the "shading only" note
+// on the hillshade layer.
+// 0m stop is fully transparent, matching the source ramp's "0 0 0 0 0" row -
+// sea level/water should show the ocean/paper underneath, not green.
+{
+	"id": "hypsometric-tint",
+	"type": "color-relief",
+	"source": "dem",
+	"maxzoom": 8,
+	"paint": {
+		"color-relief-color": [
+			"interpolate", ["linear"], ["elevation"],
+			0, "rgba(0,0,0,0)",
+			1, "rgb(17,120,3)",
+			100, "rgb(72,162,69)",
+			300, "rgb(231,218,158)",
+			1500, "rgb(161,67,0)",
+			3000, "rgb(130,30,30)",
+			4000, "rgb(110,110,110)",
+			5000, "rgb(255,255,255)",
+			6000, "rgb(255,255,255)"
+		],
+		"color-relief-opacity": ["interpolate", ["linear"], ["zoom"], 8, 1, 10, 0]
+	}
+},
+
 {
 	"id": "ocean",
-	"source": "opentopomap-vector",
+	"source": "opentopomap-ocean",
 	"source-layer": "ocean",
 	"type": "fill",
 	"paint": {"fill-color": "#9DD4E8"}
@@ -63,6 +100,7 @@ const otm_layers = [
 	"source-layer": "land",
 	"filter": ["in", "type", "forest", "forest_conifer", "forest_deciduous", "wood"],
 	"type": "fill",
+	"minzoom": 8,
 	"paint": {
 		"fill-pattern": ["match", ["get", "type"],
 			"forest_conifer", "pattern-forest-conifer",
@@ -109,6 +147,17 @@ const otm_layers = [
 	"filter": ["in", "type", "scrub", "heath"],
 	"type": "fill",
 	"paint": {"fill-pattern": "pattern-scrub"}
+},
+{
+	// natural=fell: mountain tundra above the tree line, stippled with scattered
+	// stone dots and a few sparser grass-tuft marks, same pattern as the Garmin map.
+	"id": "fell",
+	"source": "opentopomap-vector",
+	"source-layer": "land",
+	"minzoom": 11,
+	"filter": ["==", "type", "fell"],
+	"type": "fill",
+	"paint": {"fill-pattern": "pattern-fell"}
 },
 {
 	"id": "sand",
@@ -183,15 +232,16 @@ const otm_layers = [
 	"source-layer": "water_polygons",
 	"filter": ["==", "type", "glacier"],
 	"type": "fill",
+	"minzoom": 10,
 	"paint": {"fill-color": "#FFFFFF", "fill-outline-color": "#2A6A9A"}
 },
 {
-	// No outline: a crevasse field has no edge on the ground, so it is shown by the
-	// hatching of crevasse-lines and crevasse-stripes, as on the Garmin map.
+	// No outline: a crevasse field has no edge on the ground, so it is shown by
+	// the mapped crevasse-lines, as on the Garmin map.
 	"id": "crevasse-poly",
 	"source": "opentopomap-vector",
 	"source-layer": "natural_polygons",
-	"minzoom": 9,
+	"minzoom": 10,
 	"filter": ["==", "type", "crevasse"],
 	"type": "fill",
 	"paint": {"fill-color": "#FFFFFF"}
@@ -224,20 +274,41 @@ const otm_layers = [
 	}
 },
 
+// Ridges (хребтовка)
+// ==================
+// Mapped crest lines, natural=ridge/arete. They carry the relief on their own
+// below the contour floor, where a 20 m interval would only be a brown wash —
+// the division the Garmin overlay makes between its 0x10 ridge symbol and the
+// contour symbols. Moraine crests are excluded: moraine-ridge draws them with
+// their own ticked symbol.
+{
+	"id": "ridge-lines",
+	"type": "line",
+	"source": "opentopomap-vector",
+	"source-layer": "natural_lines",
+	"minzoom": 9,
+	"filter": ["match", ["get", "type"], ["ridge", "arete"], true, false],
+	"paint": {
+		"line-color": "#5A3318",
+		"line-width": ["interpolate", ["linear"], ["zoom"], 9, 1.0, 12, 1.2, 17, 1.8]
+	}
+},
+
 // Contours
 // ========
 // Three-step Genshtab hierarchy derived from the elevation: every 100 m thick,
-// every 50 m medium, the rest thin. Blue on glaciers as soon as the contour
-// source provides on_glacier; the client-side DEM isolines do not, so they stay
-// brown there. "steep" thins the major lines on slopes over 50 degrees.
+// every 50 m medium, the rest thin. Isolines come from Mapterhorn in the browser
+// and have no ice/slope flags, so they stay brown everywhere.
+//
+// minzoom matches the contour source, which maplibre-contour fills from z12 up.
 {
 	"id": "contour-lines",
 	"type": "line",
 	"source": "contour-source",
 	"source-layer": "contours",
+	"minzoom": 12,
 	"paint": {
 		"line-color": ["case",
-			["to-boolean", ["coalesce", ["get", "on_glacier"], false]], "#2A6A9A",
 			["==", ["%", ["get", "ele"], 100], 0], "#8B4518",
 			["==", ["%", ["get", "ele"], 50], 0], "#A86038",
 			"#C07848"
@@ -245,12 +316,12 @@ const otm_layers = [
 		"line-width": ["interpolate", ["linear"], ["zoom"],
 			11, ["case", ["==", ["%", ["get", "ele"], 100], 0], 0.6, 0.3],
 			14, ["case",
-				["all", ["==", ["%", ["get", "ele"], 100], 0], ["!", ["to-boolean", ["coalesce", ["get", "steep"], false]]]], 1.4,
+				["==", ["%", ["get", "ele"], 100], 0], 1.4,
 				["==", ["%", ["get", "ele"], 50], 0], 0.8,
 				0.5
 			],
 			17, ["case",
-				["all", ["==", ["%", ["get", "ele"], 100], 0], ["!", ["to-boolean", ["coalesce", ["get", "steep"], false]]]], 2.2,
+				["==", ["%", ["get", "ele"], 100], 0], 2.2,
 				["==", ["%", ["get", "ele"], 50], 0], 1.2,
 				0.7
 			]
@@ -271,10 +342,10 @@ const otm_layers = [
 		"text-keep-upright": false,
 		"text-field": "{ele}",
 		"text-size": ["step", ["zoom"], 8, 15, 9],
-		"text-font": ["Roboto Regular"]
+		"text-font": ["Noto Sans Regular"]
 	},
 	"paint": {
-		"text-color": ["case", ["to-boolean", ["coalesce", ["get", "on_glacier"], false]], "#2A6A9A", "#A86038"],
+		"text-color": "#A86038",
 		"text-halo-color": "rgba(243,230,196,0.7)",
 		"text-halo-width": 1.5
 	}
@@ -359,31 +430,14 @@ const otm_layers = [
 	"source": "opentopomap-vector",
 	"source-layer": "natural_lines",
 	"minzoom": 9,
-	"filter": ["in", "type", "crevasse", "crevasse_stripe"],
+	"filter": ["==", "type", "crevasse"],
 	"type": "line",
 	"paint": {
 		"line-color": "#2A6A9A",
 		"line-width": ["interpolate", ["linear"], ["zoom"],
 			9, 1.0,
 			13, 2.0,
-			17, ["match", ["get", "type"], "crevasse_stripe", 2.4, 3.6]
-		]
-	}
-},
-{
-	// Hatching perpendicular to glacier flow from www/garminsvc/garminsvc/crevasse.py.
-	// Only present when the served contour tileset from tools/build_contours.py is used.
-	"id": "crevasse-stripes",
-	"source": "contour-source",
-	"source-layer": "crevasses",
-	"minzoom": 11,
-	"type": "line",
-	"paint": {
-		"line-color": "#2A6A9A",
-		"line-width": ["interpolate", ["linear"], ["zoom"],
-			11, 1.0,
-			14, 1.8,
-			17, ["case", ["==", ["get", "width"], 2], 3.2, 2.2]
+			17, 3.6
 		]
 	}
 },
@@ -522,8 +576,8 @@ const otm_layers = [
 	"type": "line",
 	"paint": {
 		"line-color": "#000000",
-		"line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.6, 14, 1.1, 17, 1.8],
-		"line-dasharray": [2, 2]
+		"line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.9, 14, 1.7, 17, 2.8],
+		"line-dasharray": [3, 2]
 	}
 },
 {
@@ -573,8 +627,11 @@ const otm_layers = [
 	"type": "symbol",
 	"layout": {
 		"symbol-placement": "point",
-		"icon-image": ["coalesce", ["image", ["get", "type"]], ["image", "information"]],
-		"icon-anchor": ["match", ["get", "type"], "peak", "bottom", "center"],
+		"icon-image": ["coalesce",
+			["image", ["get", "type"]],
+			["image", "information"]
+		],
+		"icon-anchor": ["match", ["get", "type"], "peak", "bottom", "volcano", "bottom", "center"],
 		// Sprite images already carry their intended screen size (roughly 1.5x the
 		// Garmin bitmap, enough to stay legible); the single-tree landmarks are large
 		// to begin with and would dominate.
@@ -588,17 +645,21 @@ const otm_layers = [
 	"source": "opentopomap-vector",
 	"source-layer": "pois",
 	"minzoom": 12,
-	"filter": ["in", "type", "peak", "volcano"],
+	"filter": ["in", ["get", "type"], ["literal", ["peak", "volcano"]]],
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
-		// ele arrives as a double, so it has to be rounded: printing it raw gives
-		// "3314.300048828125" instead of the metre value.
+		// to-number is a no-op on the tile's numeric ele and keeps this working
+		// on a tileset that carries it as text.
 		"text-field": ["concat",
-			["get", "name"],
-			["case", ["has", "ele"], ["concat", "\n", ["to-string", ["round", ["get", "ele"]]]], ""]
+			["coalesce", ["get", "name"], ""],
+			["case",
+				[">", ["to-number", ["get", "ele"]], 0],
+				["concat", "\n", ["to-string", ["round", ["to-number", ["get", "ele"]]]]],
+				""
+			]
 		],
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 12],
 		"text-anchor": "left",
 		"text-offset": [0.7, -0.4],
@@ -615,16 +676,24 @@ const otm_layers = [
 	"source": "opentopomap-vector",
 	"source-layer": "pois",
 	"minzoom": 12,
-	"filter": ["==", "type", "saddle"],
+	"filter": ["==", ["get", "type"], "saddle"],
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
 		"text-field": ["concat",
-			["get", "name"],
-			["case", ["has", "rtsa_scale"], ["concat", " ", ["get", "rtsa_scale"]], ""],
-			["case", ["has", "ele"], ["concat", "\n", ["to-string", ["round", ["get", "ele"]]]], ""]
+			["coalesce", ["get", "name"], ""],
+			["case",
+				["all", ["has", "rtsa_scale"], ["!=", ["get", "rtsa_scale"], ""]],
+				["concat", " ", ["get", "rtsa_scale"]],
+				""
+			],
+			["case",
+				[">", ["to-number", ["get", "ele"]], 0],
+				["concat", "\n", ["to-string", ["round", ["to-number", ["get", "ele"]]]]],
+				""
+			]
 		],
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 16, 12],
 		"text-anchor": "left",
 		"text-offset": [0.7, 0],
@@ -647,7 +716,7 @@ const otm_layers = [
 	"layout": {
 		"symbol-placement": "point",
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 17, 11],
 		"text-anchor": "top",
 		"text-offset": [0, 0.6],
@@ -662,13 +731,16 @@ const otm_layers = [
 {
 	"id": "glacier-labels",
 	"source": "opentopomap-vector",
+	// Names come from the label layer, not the fill: tilemaker writes one
+	// centroid per named water body there, so a glacier spread over many
+	// polygons is labelled once instead of per polygon.
 	"source-layer": "water_polygons_labels",
-	"filter": ["==", "type", "glacier"],
+	"filter": ["==", ["get", "type"], "glacier"],
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 15, 13],
 		"text-letter-spacing": 0.15
 	},
@@ -682,12 +754,15 @@ const otm_layers = [
 	"id": "water-polygon-labels",
 	"source": "opentopomap-vector",
 	"source-layer": "water_polygons_labels",
-	"filter": ["!=", "type", "glacier"],
+	// Lakes stay off until large scales; glaciers are labelled by the layer
+	// above, three zooms earlier, because they are the primary content here.
+	"minzoom": 13,
+	"filter": ["!=", ["get", "type"], "glacier"],
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 18, 12]
 	},
 	"paint": {
@@ -699,13 +774,15 @@ const otm_layers = [
 {
 	"id": "water-line-labels",
 	"source": "opentopomap-vector",
+	// Its own layer, with a later per-feature floor than the line itself:
+	// a river is drawn from z7 but only worth naming from z12.
 	"source-layer": "water_lines_labels",
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
 		"symbol-placement": "line",
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 13, 9, 18, 11]
 	},
 	"paint": {
@@ -718,13 +795,13 @@ const otm_layers = [
 	"id": "street-names",
 	"source": "opentopomap-vector",
 	"source-layer": "street_labels",
-	"minzoom": 15,
+	"minzoom": 13,
 	"metadata": {"translate": true},
 	"type": "symbol",
 	"layout": {
 		"symbol-placement": "line",
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 15, 9, 18, 11]
 	},
 	"paint": {
@@ -739,12 +816,12 @@ const otm_layers = [
 	"source-layer": "place_labels",
 	"minzoom": 12,
 	"metadata": {"translate": true},
-	"filter": ["in", "type", "suburb", "quarter", "neighbourhood", "island", "hamlet",
-		"isolated_dwelling", "farm", "locality"],
+	"filter": ["in", ["get", "type"], ["literal", ["suburb", "quarter", "neighbourhood", "island", "hamlet",
+		"isolated_dwelling", "farm", "locality"]]],
 	"type": "symbol",
 	"layout": {
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 12, 9, 15, 11],
 		"text-variable-anchor": ["bottom-left", "center", "right", "bottom", "bottom-right", "top-left", "top", "top-right"]
 	},
@@ -759,11 +836,11 @@ const otm_layers = [
 	"source": "opentopomap-vector",
 	"source-layer": "place_labels",
 	"metadata": {"translate": true},
-	"filter": ["==", "type", "village"],
+	"filter": ["==", ["get", "type"], "village"],
 	"type": "symbol",
 	"layout": {
 		"text-field": "{name}",
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 13, 13],
 		"text-variable-anchor": ["bottom-left", "center", "right", "bottom", "bottom-right", "top-left", "top", "top-right"]
 	},
@@ -778,12 +855,12 @@ const otm_layers = [
 	"source": "opentopomap-vector",
 	"source-layer": "place_labels",
 	"metadata": {"translate": true},
-	"filter": ["in", "type", "town", "city", "state_capital", "capital"],
+	"filter": ["in", ["get", "type"], ["literal", ["town", "city", "state_capital", "capital"]]],
 	"type": "symbol",
 	"layout": {
 		"text-field": "{name}",
 		"symbol-sort-key": ["-", ["to-number", ["get", "population"], 0]],
-		"text-font": ["Roboto Regular"],
+		"text-font": ["Noto Sans Regular"],
 		"text-size": ["interpolate", ["linear"], ["zoom"],
 			6, ["match", ["get", "type"], "town", 10, 12],
 			10, ["match", ["get", "type"], "town", 14, 19]

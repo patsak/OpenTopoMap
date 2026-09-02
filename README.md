@@ -1,20 +1,26 @@
 OpenTopoMap
 ===========
-OpenTopoMap is a topographic map out of data from OpenStreetMap and SRTM. If you are interested in building your own OpenTopoMap, see the beginner's guides for [a tile server](mapnik/README.md) and for [Garmin files](garmin/README.md).
 
-### Mapnik
-The main OpenTopoMap is a online rendered raster map. It can be used with the web interface on https://opentopomap.org, which gives you nice features like a search function or loading your gpx tracks. Futhermore, OpenTopoMap can be included into other applications. See https://opentopomap.org/about#verwendung for information on usage. The license of the online map is CC-BY-SA.
+Topographic map from OpenStreetMap and DEM data: live vector tiles and Garmin `.img` / `.gmap` builds.
 
-The online renderer is based on Mapnik. All necessary files are available to build your own OpenTopoMap server.
-Please note, that the old raster tiles are depreciated. OpenTopoMap will switch to vector tiles.
+### Vector tiles (tilemaker + Martin)
 
-### Tilemaker
-New vector tiles will be generated via tilemaker and are based on a modified shortbread scheme.
+Geofabrik extracts are kept current in place (full PBF once, then `.osc.gz` diffs) and turned into `.mbtiles` by tilemaker (`vector/tilemaker/process-otm.lua`), which Martin serves as files. Postgres holds only the pipeline's metadata. See [vector/HOWTO_vector_tiles.md](vector/HOWTO_vector_tiles.md) and [www/tilesvc](www/tilesvc).
+
+Local stack:
+
+```bash
+cd www/garminsvc
+docker compose up -d --build
+docker compose run --rm tilesvc-job python -m tilesvc
+docker compose restart tiles
+```
+
+Map UI: `http://localhost:8080/`. Martin: `http://localhost:3000/otm/{z}/{x}/{y}`.
 
 ### Garmin
-Since summer 2014 there is a Garmin edition of the OpenTopoMap. They can be downloaded from http://garmin.opentopomap.org. The license of the Garmin maps is CC-BY-NC-SA and therefore reselling is not allowed. Manual build walkthrough: [garmin/README.md](garmin/README.md). The bbox build service lives in [www/garminsvc](www/garminsvc).
 
-Here are some screenshots:
+Offline maps for Garmin devices. License of the Garmin maps is CC-BY-NC-SA; reselling is not allowed. Manual build: [garmin/README.md](garmin/README.md). Bbox build service: [www/garminsvc](www/garminsvc).
 
 ![screenshot1](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot1.png)
 ![screenshot2](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot2.png)

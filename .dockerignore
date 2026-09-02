@@ -16,10 +16,20 @@ www/garminsvc/.venv-*/
 www/garminsvc/tools/phyghtmap-*/
 www/garminsvc/tools/examples/
 www/garminsvc/tools/doc/
+# Java tooling is installed from the pinned distributions in the Dockerfile. A copy
+# left in the working tree must not reach the image: an unpacked jar without its
+# lib/ directory runs until it needs fastutil and then dies mid-build.
+www/garminsvc/tools/*.jar
+www/garminsvc/tools/mkgmap-*/
+www/garminsvc/tools/splitter-*/
+www/garminsvc/tools/*.osm
+www/garminsvc/tools/*.tif
+www/garminsvc/tools/*.tdb
+www/garminsvc/tools/*.torrent
+www/garminsvc/tools/*.tar.gz
 .git/
 **/.venv/
 www/garminsvc/docker-compose.override.yml
 garmin/data/
 garmin/output/
 garmin/screenshots/
-garmin/www/
