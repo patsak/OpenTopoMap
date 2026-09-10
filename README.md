@@ -17,13 +17,10 @@ docker compose run --rm tilesvc-job python -m tilesvc
 
 Map UI: `http://localhost:8080/`. Built previews: `http://localhost:8081/<id>.pmtiles`.
 
+### Tools
+
+Command-line helpers for preparing topographic data for OSM: ridge lines from a DEM (GRASS hydrology on the inverted relief). See [tools/README.md](tools/README.md).
+
 ### Garmin
 
 Offline maps for Garmin devices. License of the Garmin maps is CC-BY-NC-SA; reselling is not allowed. Manual build: [garmin/README.md](garmin/README.md). Bbox build service: [www/garminsvc](www/garminsvc).
-
-![screenshot1](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot1.png)
-![screenshot2](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot2.png)
-![screenshot3](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot3.png)
-![screenshot4](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot4.png)
-![screenshot5](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot5.png)
-![screenshot6](https://raw.githubusercontent.com/der-stefan/OpenTopoMap/master/garmin/screenshots/screenshot6.png)
