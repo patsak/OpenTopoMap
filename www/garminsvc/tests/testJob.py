@@ -1,8 +1,8 @@
 import unittest
 from uuid import uuid4
 
-from tests.jobaide import job
 from garminsvc.job import JobStatus, job_download_filename, normalize_job_name
+from garminsvc.tests.jobaide import job
 
 
 class TestJobCancel(unittest.TestCase):

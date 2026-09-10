@@ -2,7 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from garminsvc.deps import ConsoleProgress, data_present, download_percent, human_bytes
+from garminsvc.deps import data_present
+from garminsvc.fetch import ConsoleProgress, download_percent, human_bytes
 
 
 class TestDownloadHelpers(unittest.TestCase):

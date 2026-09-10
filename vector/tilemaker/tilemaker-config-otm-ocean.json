@@ -1,0 +1,48 @@
+{
+	"layers": {
+		"ocean": {
+			"minzoom": 8,
+			"maxzoom": 14,
+			"source": "shapefiles/water-polygons-split-4326/water_polygons.shp",
+			"source_columns": true,
+			"simplify_below": 14,
+			"simplify_level": 0.0001,
+			"simplify_ratio": 2
+		},
+		"ocean-low": {
+			"minzoom": 0,
+			"maxzoom": 7,
+			"source": "shapefiles/simplified-water-polygons-split-4326/simplified_water_polygons.shp",
+			"source_columns": true,
+			"simplify_below": 14,
+			"simplify_level": 0.0001,
+			"simplify_ratio": 2,
+			"write_to": "ocean"
+		}
+	},
+	"settings": {
+		"minzoom": 0,
+		"maxzoom": 14,
+		"basezoom": 14,
+		"include_ids": false,
+		"high_resolution": true,
+		"name": "OpenTopoMap ocean",
+		"version": "0.9",
+		"description": "Coastline-derived ocean polygons, built from shapefiles only (no OSM input)",
+		"compress": "gzip",
+		"filesettings": {},
+		"filemetadata": {
+			"tilejson": "2.0.0",
+			"scheme": "xyz",
+			"type": "baselayer",
+			"format": "pbf",
+			"tiles": [
+				"https://opentopomap.org/otm-ocean/{z}/{x}/{y}.pbf"
+			]
+		},
+		"metadata": {
+			"author": "OpenStreetMap contributors, OpenTopoMap",
+			"license": "Open Database License 1.0"
+		}
+	}
+}

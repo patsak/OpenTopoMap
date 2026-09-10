@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Download external Garmin map build dependencies (mkgmap, splitter, sea, bounds).
 
-Does not start the HTTP server. Run once before `python server.py`:
+Does not start the HTTP server. Run once before `python -m garminsvc.server`:
 
   pip install -r requirements-server.txt
-  python download_deps.py
+  python -m garminsvc.download_deps
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+# www/ in a checkout, /app in Docker: where both `garminsvc` and `otmlib` live.
+sys.path.insert(0, str(ROOT.parent))
 
 from garminsvc.deps import download_deps
 

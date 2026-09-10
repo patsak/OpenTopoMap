@@ -5,4 +5,5 @@ pyhgtmap>=2.0
 npyosmium>=4.0
 numpy>=1.24
 scipy>=1.10
-huey>=2.5
+huey>=3.0
+psycopg[binary]>=3.2

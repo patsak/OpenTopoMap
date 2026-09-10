@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -11,59 +11,88 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <link rel="stylesheet" href="/static/app.css" />
 </head>
-<body>
+<body x-data="garminApp()">
   <header class="bar">
     <div class="brand">
       <strong>OpenTopoMap Garmin</strong>
-      <span class="muted">выделите область на карте и соберите .img</span>
+      <span class="muted">draw an area on the map and build an .img</span>
     </div>
     <div class="actions">
       <label class="basemap">
-        Подложка
-        <select id="basemap" aria-label="Подложка карты"></select>
+        Basemap
+        <select aria-label="Basemap" x-model="selectedBasemap" @change="onBasemapChange()">
+          <template x-for="option in basemaps" :key="option.id">
+            <option :value="option.id" x-text="option.name"></option>
+          </template>
+        </select>
       </label>
-      <div id="queue-len" class="queue-len" title="Джобы, ожидающие сборки">Очередь: —</div>
-      <button type="button" id="btn-clear" class="btn ghost" disabled>Сбросить</button>
-      <button type="button" id="btn-cancel" class="btn danger" disabled>Отменить</button>
-      <button type="button" id="btn-build" class="btn primary" disabled>Собрать карту</button>
+      <div class="queue-len" title="Jobs waiting to be built" x-text="queueText">Queue: —</div>
+      <button type="button" class="btn ghost" :disabled="clearDisabled" @click="clearBbox()">Reset</button>
+      <button type="button" class="btn danger" :disabled="cancelDisabled" @click="onCancelClick()">Cancel</button>
+      <button type="button" class="btn ghost" :disabled="previewDisabled" :title="previewTitle" @click="requestPreview()">Preview</button>
+      <button type="button" class="btn primary" :disabled="buildDisabled" @click="onBuildClick()">Build map</button>
     </div>
   </header>
 
   <main class="layout">
     <div id="map"></div>
     <aside class="panel">
-      <h1>Область</h1>
-      <p class="hint">Нарисуйте прямоугольник инструментом на карте (каждая сторона — не больше 500 км) или загрузите .osm / .pbf до 200 МБ.</p>
-      <dl class="bbox" id="bbox-view">
-        <div><dt>West</dt><dd id="v-west">—</dd></div>
-        <div><dt>South</dt><dd id="v-south">—</dd></div>
-        <div><dt>East</dt><dd id="v-east">—</dd></div>
-        <div><dt>North</dt><dd id="v-north">—</dd></div>
+      <h1>Area</h1>
+      <p class="hint">Draw a rectangle with the tool on the map (no side longer than 500 km), or upload an .osm / .pbf file of up to 200 MB.</p>
+      <dl class="bbox">
+        <div><dt>West</dt><dd x-text="west">—</dd></div>
+        <div><dt>South</dt><dd x-text="south">—</dd></div>
+        <div><dt>East</dt><dd x-text="east">—</dd></div>
+        <div><dt>North</dt><dd x-text="north">—</dd></div>
       </dl>
       <label class="field">
-        Название карты
-        <input id="map-name" type="text" maxlength="80" placeholder="Эльбрус, Архыз…" autocomplete="off" />
+        Map name
+        <input type="text" maxlength="80" placeholder="Elbrus, Arkhyz…" autocomplete="off" x-model="mapName" x-ref="mapName" @input="updateBuildEnabled()" />
       </label>
       <label class="field">
-        OSM / PBF файл
-        <input id="osm-file" type="file" accept=".pbf,.osm,.gz,.bz2,.xml,application/octet-stream" />
+        OSM / PBF file
+        <input type="file" accept=".pbf,.osm,.gz,.bz2,.xml,application/octet-stream" x-ref="osmFile" @change="onFileChange($event)" />
       </label>
-      <p class="hint">Вместо bbox: .osm, .osm.pbf, .pbf (можно .gz / .bz2), максимум 200 МБ.</p>
+      <p class="hint">Instead of a bbox: .osm, .osm.pbf, .pbf (.gz / .bz2 accepted), 200 MB at most.</p>
 
-      <h2>Статус</h2>
-      <div id="status" class="status idle">Выберите bbox</div>
-      <pre id="log" class="log" hidden></pre>
-      <a id="download" class="btn primary download" hidden href="#">Скачать ZIP</a>
+      <h2>Preview</h2>
+      <p class="hint">Builds the selected area in the OpenTopoMap style and shows it on the map, as “Basemap → Area preview”. It is web cartography over the same data, not an exact render of what the device draws.</p>
+      <div class="preview-status" :class="previewStatus.kind" x-show="previewStatus.text" x-text="previewStatus.text"></div>
 
-      <h2>Последние карты</h2>
-      <input id="history-filter" class="field-input" type="search" placeholder="Поиск по названию" autocomplete="off" />
-      <p class="hint" id="history-empty">Пока нет сохранённых сборок.</p>
-      <ul id="history" class="history" hidden></ul>
+      <h2>Status</h2>
+      <div class="status" :class="status.kind" x-text="status.text">Select a bbox</div>
+      <pre class="log" x-ref="log" x-show="logVisible" x-text="log"></pre>
+      <a class="btn primary download" x-show="downloadVisible" :href="downloadHref">Download ZIP</a>
+
+      <h2>Recent maps</h2>
+      <input class="field-input" type="search" placeholder="Search by name" autocomplete="off" x-model="historyFilter" />
+      <p class="hint" x-show="!filteredHistoryJobs.length" x-text="historyJobs.length ? 'Nothing found.' : 'No saved builds yet.'">No saved builds yet.</p>
+      <ul class="history" x-show="filteredHistoryJobs.length">
+        <template x-for="job in filteredHistoryJobs" :key="job.job_id">
+          <li>
+            <div class="history-item" :class="{ active: job.job_id === currentJobId }" @click="openHistoryJob(job)">
+              <div class="row">
+                <span class="title" x-text="jobTitle(job)"></span>
+                <span class="when" x-text="fmtDate(job.created_at)"></span>
+              </div>
+              <div class="row">
+                <span class="st" :class="job.status" x-text="statusLabel(job)"></span>
+              </div>
+              <div class="bbox-line" x-text="bboxLine(job)"></div>
+              <a class="dl" x-show="job.downloadable" :href="`/jobs/${job.job_id}/download`" @click.stop>Download ZIP</a>
+              <button type="button" class="dl" x-show="!job.downloadable && job.cancellable" @click.stop="requestCancel(job.job_id)">Cancel</button>
+            </div>
+          </li>
+        </template>
+      </ul>
     </aside>
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="/static/app.js"></script>
+  <!-- app.js is a plain (non-deferred) script, so it always finishes before
+       this deferred one runs and evaluates x-data="garminApp()" above. -->
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.1/dist/cdn.min.js" defer></script>
 </body>
 </html>

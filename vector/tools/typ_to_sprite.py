@@ -9,22 +9,22 @@ them into a sprite sheet and writes the accompanying sprite JSON.
 Symbols that have an SVG of the same name in vector/symbols/ are taken from there
 instead: the Garmin bitmaps are 8-16 px of pixel art and blur when a screen asks
 for more, so the most prominent ones are authored as vector and rasterised here at
-each sprite resolution. Requires rsvg-convert (librsvg) for those.
+each sprite resolution. Requires the cairosvg and Pillow packages for those
+(`pip install cairosvg pillow`).
 
     python3 vector/tools/typ_to_sprite.py
 
-No third-party Python dependencies: PNG is encoded and decoded with zlib/struct so
-the script runs on a bare Python install.
+The sprite sheet itself is encoded with zlib/struct, no third-party dependency
+needed unless the style has SVG overrides.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
-import shutil
 import struct
-import subprocess
 import sys
 import zlib
 from pathlib import Path
@@ -88,6 +88,7 @@ PATTERNS = {
     "0x4e": ["pattern-vineyard"],
     "0x11004": ["pattern-orchard"],
     "0x4f": ["pattern-scrub"],
+    "0x58": ["pattern-fell"],
     "0x1a": ["pattern-cemetery"],
     "0x55": ["pattern-sand"],
     "0x56": ["pattern-scree"],
@@ -194,80 +195,22 @@ def encode_png(bitmap: Bitmap) -> bytes:
     )
 
 
-def decode_png(data: bytes) -> Bitmap:
-    """Minimal reader for the 8-bit RGB/RGBA PNGs that rsvg-convert writes."""
-    if data[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError("not a PNG")
-    pos = 8
-    header = None
-    idat = bytearray()
-    while pos < len(data):
-        length, tag = struct.unpack(">I4s", data[pos : pos + 8])
-        payload = data[pos + 8 : pos + 8 + length]
-        pos += 12 + length
-        if tag == b"IHDR":
-            width, height, depth, colour, compression, filt, interlace = struct.unpack(
-                ">IIBBBBB", payload
-            )
-            if depth != 8 or colour not in (2, 6) or compression or filt or interlace:
-                raise ValueError(f"unsupported PNG: depth={depth} colour={colour}")
-            header = (width, height, 4 if colour == 6 else 3)
-        elif tag == b"IDAT":
-            idat += payload
-        elif tag == b"IEND":
-            break
-    if header is None:
-        raise ValueError("PNG without IHDR")
-    width, height, channels = header
-    raw = zlib.decompress(bytes(idat))
-    stride = width * channels
-    rows: list[list[tuple]] = []
-    previous = bytearray(stride)
-    at = 0
-    for _ in range(height):
-        filter_type = raw[at]
-        line = bytearray(raw[at + 1 : at + 1 + stride])
-        at += 1 + stride
-        for i in range(stride):
-            left = line[i - channels] if i >= channels else 0
-            up = previous[i]
-            up_left = previous[i - channels] if i >= channels else 0
-            if filter_type == 1:
-                line[i] = (line[i] + left) & 0xFF
-            elif filter_type == 2:
-                line[i] = (line[i] + up) & 0xFF
-            elif filter_type == 3:
-                line[i] = (line[i] + (left + up) // 2) & 0xFF
-            elif filter_type == 4:
-                estimate = left + up - up_left
-                candidates = (
-                    (abs(estimate - left), left),
-                    (abs(estimate - up), up),
-                    (abs(estimate - up_left), up_left),
-                )
-                line[i] = (line[i] + min(candidates)[1]) & 0xFF
-            elif filter_type != 0:
-                raise ValueError(f"unsupported PNG filter {filter_type}")
-        rows.append(
-            [
-                tuple(line[x * channels : x * channels + channels]) + ((255,) if channels == 3 else ())
-                for x in range(width)
-            ]
-        )
-        previous = line
-    return Bitmap(width, height, rows)
-
-
 def render_svg(path: Path, factor: int) -> Bitmap:
     """Rasterise at factor times the SVG's own size, which is the 1x sprite size."""
-    if shutil.which("rsvg-convert") is None:
-        raise SystemExit("rsvg-convert not found on PATH, needed for vector/symbols/*.svg")
-    result = subprocess.run(
-        ["rsvg-convert", "--zoom", str(factor), "--format", "png", str(path)],
-        check=True,
-        stdout=subprocess.PIPE,
-    )
-    return decode_png(result.stdout)
+    try:
+        import cairosvg
+        from PIL import Image
+    except ImportError as exc:
+        raise SystemExit(
+            f"{exc}: cairosvg and pillow are needed for vector/symbols/*.svg "
+            "(pip install cairosvg pillow)"
+        ) from exc
+    png_bytes = cairosvg.svg2png(url=str(path), scale=factor)
+    image = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+    width, height = image.size
+    pixels = image.load()
+    rows = [[pixels[x, y] for x in range(width)] for y in range(height)]
+    return Bitmap(width, height, rows)
 
 
 def svg_overrides(svg_dir: Path) -> dict[str, Path]:

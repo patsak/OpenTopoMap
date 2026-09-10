@@ -1,0 +1,6 @@
+# supercronic schedule for the region sync (see Dockerfile).
+# Nightly, because Geofabrik publishes daily diffs: running more often would
+# only re-fetch the same state.txt. A night with nothing new costs those
+# fetches and no more - applying diffs is the only work here, and tiles are
+# rendered later, per drawn bbox, by the preview worker.
+0 2 * * * cd /app && /opt/otm-venv/bin/python -m tilesvc

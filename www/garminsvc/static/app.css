@@ -66,6 +66,21 @@ html, body {
   max-width: 12rem;
 }
 
+/* Same shape as .status, but it reports the preview worker rather than a build. */
+.preview-status {
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  background: #efeae1;
+  color: var(--muted);
+}
+
+.preview-status.running { color: var(--warn); border-color: #d9b48a; background: #f6ebdc; }
+.preview-status.done { color: var(--ok); border-color: #9fc5a8; background: #e7f3ea; }
+.preview-status.error { color: var(--err); border-color: #d3a2a2; background: #f7e7e7; }
+
 .queue-len {
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
@@ -84,6 +99,7 @@ html, body {
 }
 
 #map {
+  position: relative;
   width: 100%;
   height: 100%;
   background: #d7d2c8;
@@ -333,6 +349,64 @@ html, body {
 }
 
 .history-item .dl:hover { text-decoration: underline; }
+
+/* Go to coordinates (Leaflet control, top-right) */
+.goto-control {
+  background: var(--panel);
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+}
+
+.goto-control .goto-toggle {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.goto-control .goto-toggle svg { width: 18px; height: 18px; fill: var(--ink); }
+
+.goto-panel {
+  display: none;
+  padding: 0.6rem;
+  width: 220px;
+}
+
+.goto-panel.open { display: block; }
+
+.goto-panel input {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: #efeae1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  width: 100%;
+}
+
+.goto-panel .goto-error {
+  color: var(--err);
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+}
+
+.goto-panel .goto-hint {
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin-top: 0.4rem;
+  line-height: 1.3;
+}
+
+.goto-panel .goto-go {
+  margin-top: 0.5rem;
+  width: 100%;
+}
 
 @media (max-width: 800px) {
   .layout {

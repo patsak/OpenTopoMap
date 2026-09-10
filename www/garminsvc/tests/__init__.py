@@ -1,6 +1,5 @@
-import sys
-from pathlib import Path
+"""Tests for the Garmin map service.
 
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+A subpackage of garminsvc, like otmlib.tests: one import root for the whole of
+www/, the same layout the image gets under /app.
+"""

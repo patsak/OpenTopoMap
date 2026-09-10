@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgdal-dev \
         osmium-tool \
         curl \
-        unzip \
         ca-certificates \
         g++ \
         cmake \
@@ -27,45 +26,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgeos-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG MKGMAP_VERSION=mkgmap-r4924
-ARG SPLITTER_VERSION=splitter-r654
-
 WORKDIR /app
+
+# The shared volume, and not the package directory garminsvc.constants would
+# otherwise default to now that the package sits in /app/garminsvc.
+ENV OTM_DATA_DIR=/app/data
+# Outside /app/data: that path is the shared volume, and the jars belong to the
+# image. garminsvc.constants reads this.
+ENV OTM_TOOLS_DIR=/opt/garmin-tools
 
 COPY www/garminsvc/requirements-server.txt /app/requirements-server.txt
 RUN python3 -m venv --system-site-packages /opt/otm-venv \
     && /opt/otm-venv/bin/pip install --no-cache-dir -U pip \
     && /opt/otm-venv/bin/pip install --no-cache-dir -r /app/requirements-server.txt
 
-COPY www/garminsvc/ /app/
+COPY www/garminsvc/ /app/garminsvc/
+# Shared with tilesvc; a plain package next to garminsvc, no install step.
+COPY www/otmlib /app/otmlib
 # Cartography stays under garmin/; bake the bits the service needs into the image.
 COPY garmin/style /garmin/style
 COPY garmin/opentopomap_hike_options /garmin/opentopomap_hike_options
 COPY garmin/contours_hike_options /garmin/contours_hike_options
 
-RUN mkdir -p /app/tools \
-    && if [ ! -f /app/tools/mkgmap.jar ]; then \
-         jar="$(find /app/tools -name mkgmap.jar 2>/dev/null | head -1)"; \
-         if [ -n "$jar" ]; then ln -sfn "$jar" /app/tools/mkgmap.jar; \
-         else \
-           curl --retry 5 --retry-all-errors -fsSL -o /tmp/mkgmap.zip \
-             "https://www.mkgmap.org.uk/download/${MKGMAP_VERSION}.zip" \
-           && unzip -q /tmp/mkgmap.zip -d /app/tools \
-           && ln -sfn "/app/tools/${MKGMAP_VERSION}/mkgmap.jar" /app/tools/mkgmap.jar \
-           && rm -f /tmp/mkgmap.zip; \
-         fi; \
-       fi \
-    && if ! find /app/tools -name splitter.jar 2>/dev/null | grep -q .; then \
-           curl --retry 5 --retry-all-errors -fsSL -o /tmp/splitter.zip \
-             "https://www.mkgmap.org.uk/download/${SPLITTER_VERSION}.zip" \
-           && unzip -q /tmp/splitter.zip -d /app/tools \
-           && rm -f /tmp/splitter.zip; \
-       fi \
-    && ln -sfn "$(find /app/tools -name splitter.jar | head -1)" /app/tools/splitter.jar \
-    && test -f /app/tools/mkgmap.jar \
-    && test -e /app/tools/splitter.jar \
+# The versions, their checksums and which files are worth unpacking are stated
+# once, in garminsvc/artifacts.py — the same code a local checkout runs, so the
+# image and a developer machine cannot end up on different revisions. Nothing
+# here reads the working tree: a jar left in a checkout must not reach the image
+# (see .dockerignore).
+RUN /opt/otm-venv/bin/python -m garminsvc.fetchdeps \
     && test -d /garmin/style/opentopomap-hike \
-    && chmod +x /app/docker-entrypoint.sh
+    # Smoke test, not a formality: a missing lib/ only surfaces once mkgmap reaches
+    # for fastutil, which happens after it has already written the .typ. Compiling
+    # the real TYP here is the same code path every build starts with.
+    && mkdir -p /tmp/typcheck \
+    && (cd /tmp/typcheck \
+        && java -jar "$OTM_TOOLS_DIR/mkgmap/mkgmap.jar" --family-id=1 /garmin/style/typ/contours-hike.txt) \
+    && java -jar "$OTM_TOOLS_DIR/splitter/splitter.jar" --version >/dev/null 2>&1 \
+    && rm -rf /tmp/typcheck \
+    && chmod +x /app/garminsvc/docker-entrypoint.sh
 
 ENV PATH="/opt/otm-venv/bin:${PATH}" \
     OTM_HOST=0.0.0.0 \
@@ -78,4 +76,4 @@ ENV PATH="/opt/otm-venv/bin:${PATH}" \
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/garminsvc/docker-entrypoint.sh"]
