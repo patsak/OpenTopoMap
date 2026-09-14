@@ -12,11 +12,11 @@ redrawn here: `vector/tools/typ_to_sprite.py` extracts them from that same TYP
 file into `otm_sprite`, so the handheld map and the web map cannot drift.
 
 Palette (TYP type in brackets):
-- paper `#F3E6C4` [0x4b], built-up `#E8B09A` [0x10], building `#2A2A2A` [0x13]
+- paper `#F2E9D5` [0x4b], built-up `#E8B09A` [0x10], building `#2A2A2A` [0x13]
 - forest `#A8C888` / trees `#3D6B2E` [0x38 0x39 0x50]
 - meadow `#DCECB8` / `#8CB868` [0x17], scrub `#BCD4A0` / `#5A8A42` [0x4f]
 - mountain tundra `#C8D0A0` / stipple `#5A3318` + grass tufts `#5A8A42` [0x58]
-- farmland `#F3E6C4` / `#C4A870` [0x1c], sand `#F3E6C4` / `#D4C060` [0x55]
+- farmland `#F2E9D5` / `#C4A870` [0x1c], sand `#F2E9D5` / `#D4C060` [0x55]
 - rock/scree/moraine `#5A3318` [0x56 0x57 0x54 0x36]
 - water `#9DD4E8` [0x32 0x3c] / lines and labels `#2A6A9A` [0x18 0x1f]
 - glacier `#FFFFFF` [0x4d] / crevasse `#2A6A9A` [0x34 0x35]

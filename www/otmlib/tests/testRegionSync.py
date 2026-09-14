@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 from urllib.error import HTTPError
 
-from shapely.geometry import box
+from shapely.geometry import Polygon, box, shape
 
 from otmlib import regionsync
 
@@ -224,6 +224,33 @@ class TestConfiguredRegions(CoverageCase):
     def testNothingConfiguredIsNoRegions(self):
         self.addRegion("armenia", "Armenia", box(43.0, 38.0, 47.0, 42.0), configured=False)
         self.assertEqual(regionsync.configured_regions(self.tmp), [])
+
+
+class TestCoverageGeoJson(CoverageCase):
+    """What the map draws the covered area from."""
+
+    def testOnlyDownloadedRegionsAreDrawn(self):
+        self.addRegion("armenia", "Armenia", box(43.0, 38.0, 47.0, 42.0))
+        self.addRegion("georgia", "Georgia", box(40.0, 41.0, 47.0, 44.0), configured=False)
+        collection = regionsync.coverage_geojson(self.tmp)
+        self.assertEqual(collection["type"], "FeatureCollection")
+        self.assertEqual(
+            [f["properties"]["region_id"] for f in collection["features"]], ["armenia"]
+        )
+
+    def testTheGeometryIsTheRegionPolygonNotItsBbox(self):
+        # The outline has to be the shape a preview is accepted against, which
+        # is the region polygon - a bbox would promise coverage of the corners.
+        triangle = Polygon([(43.0, 38.0), (47.0, 38.0), (43.0, 42.0)])
+        self.addRegion("armenia", "Armenia", triangle)
+        geometry = regionsync.coverage_geojson(self.tmp)["features"][0]["geometry"]
+        self.assertEqual(shape(geometry), triangle)
+
+    def testNoRegionsIsAnEmptyCollection(self):
+        self.assertEqual(
+            regionsync.coverage_geojson(self.tmp),
+            {"type": "FeatureCollection", "features": []},
+        )
 
 
 class TestCoverageGap(CoverageCase):

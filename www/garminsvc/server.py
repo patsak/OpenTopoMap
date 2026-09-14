@@ -265,6 +265,25 @@ def get_preview(preview_id: str):
     return jsonify(_preview_payload(preview))
 
 
+@app.get("/regions")
+def covered_regions():
+    """Outlines of the regions whose extracts are on disk, as GeoJSON.
+
+    What the map draws to show where a preview or a build can be cut from,
+    before anything is drawn on it. A row reaches ``otm.regions`` only after
+    its extract has been downloaded, so this is coverage rather than the
+    configured wish list — the same polygons ``/preview`` refuses a bbox
+    against.
+    """
+    try:
+        return jsonify(regionsync.coverage_geojson(GEOFABRIK_CACHE))
+    except Exception as exc:  # noqa: BLE001
+        # Postgres down, or no cached Geofabrik index yet. The map is perfectly
+        # usable without the outlines, so say so and let it carry on.
+        log.warning("could not read the region outlines: %s", exc)
+        return jsonify({"error": "Region outlines are unavailable"}), 503
+
+
 @app.get("/vector/config")
 def vector_basemap_config():
     """Tells the picker whether the vector basemap can be offered, and where from."""

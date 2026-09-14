@@ -44,6 +44,18 @@ html, body {
 
 .muted { color: var(--muted); font-size: 0.85rem; }
 
+/* The swatch matches REGION_STYLE in app.js: the outlines of the downloaded
+   regions, so the line in the panel is recognisable as the one on the map. */
+.hint.regions::before {
+  content: "";
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border: 1.5px dashed #3f6f9f;
+  background: rgba(63, 111, 159, 0.06);
+}
+
 .actions { display: flex; gap: 0.5rem; align-items: center; }
 
 .basemap {

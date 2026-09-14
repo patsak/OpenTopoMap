@@ -110,8 +110,11 @@ The limits are deliberate:
 * **Only the regions in `www/tilesvc/config.yaml`.** A bbox outside them is
   rejected, with the covered regions named: a preview is cut from the same
   extracts `tilesvc-job` keeps current, rather than downloading a fresh region
-  on a button press. Building an `.img` is not limited this way — it still
-  takes any bbox in the world.
+  on a button press. The map draws the outline of every downloaded region
+  (`GET /regions`, the Geofabrik polygons `POST /preview` measures the bbox
+  against), so where a preview is possible can be seen before the button is
+  pressed rather than only in the error after it. Building an `.img` is not
+  limited this way — it still takes any bbox in the world.
 * **Its own queue, separate from the builds.** Otherwise a preview would wait
   out a multi-hour `.img` build: that queue has a single consumer.
 * **The 8 newest previews** stay on disk, the rest are dropped along with their

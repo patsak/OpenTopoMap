@@ -39,6 +39,7 @@
     <aside class="panel">
       <h1>Area</h1>
       <p class="hint">Draw a rectangle with the tool on the map (no side longer than 500 km), or upload an .osm / .pbf file of up to 200 MB.</p>
+      <p class="hint regions" x-show="regionNames.length" x-text="regionsHint"></p>
       <dl class="bbox">
         <div><dt>West</dt><dd x-text="west">—</dd></div>
         <div><dt>South</dt><dd x-text="south">—</dd></div>

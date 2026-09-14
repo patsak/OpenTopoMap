@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from shapely.geometry import mapping
 from shapely.ops import unary_union
 
 from otmlib import geofabrik, pgmeta
@@ -148,6 +149,31 @@ def configured_regions(
         for region in geofabrik.load_regions(cache_dir=cache_dir, base_url=base_url)
         if region.region_id in ids
     ]
+
+
+def coverage_geojson(
+    cache_dir: Path,
+    base_url: str = geofabrik.GEOFABRIK_BASE_URL,
+) -> dict:
+    """The downloaded regions as a GeoJSON FeatureCollection, for the map.
+
+    The same polygons :func:`bbox_coverage_gap` measures a drawn bbox against,
+    so an outline on the map is exactly the area a preview will be accepted
+    for — Geofabrik's region shapes, not the bboxes ``otm.regions`` stores.
+    A region is in ``otm.regions`` only once its extract has been downloaded
+    (see :func:`_sync_region`), so this is coverage, not the configured list.
+    """
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": mapping(region.geometry),
+                "properties": {"region_id": region.region_id, "name": region.name},
+            }
+            for region in sorted(configured_regions(cache_dir, base_url), key=lambda r: r.name)
+        ],
+    }
 
 
 def bbox_coverage_gap(

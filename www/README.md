@@ -94,7 +94,9 @@ The first run downloads the full extracts of the regions listed in
 while, but only once. Later runs apply the new `.osc.gz` diffs and nothing else.
 
 Until a region has been downloaded, previews over it are refused: there is
-nothing to cut them from.
+nothing to cut them from. The map outlines the regions that have been
+downloaded (`GET /regions`), so the covered area is visible before a rectangle
+is drawn.
 
 Settings:
 

@@ -68,6 +68,18 @@
     cancelled: "cancelled",
   };
   const MAX_BBOX_SIDE_KM = 500;
+  // Outlines of the regions the service has already downloaded (/regions):
+  // the area a preview or a build can be cut out of. Background, not a control
+  // - a thin dashed line and barely any fill, in a pane of its own below the
+  // drawn rectangle, so it never gets in the way of the draw tool.
+  const REGION_STYLE = {
+    color: "#3f6f9f",
+    weight: 1.5,
+    dashArray: "6 4",
+    fillColor: "#3f6f9f",
+    fillOpacity: 0.06,
+  };
+  const REGIONS_PANE = "otm-regions";
   const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
   // Leaflet/MapLibre instances, timers and the raw upload File live outside the
@@ -85,6 +97,7 @@
   let otmLayers = null; // parsed otm_layers.json, filled in by ensureVectorLibs
   let styleSpec = null; // /vector/config — MapLibre style assets and the DEM
   let previewSpec = null; // the built preview: {preview_id, tiles, …}
+  let regionsLayer = null; // /regions, the covered area drawn on the map
   let osmFile = null;
   let initialView = null; // the view (if any) carried in the URL hash at load
 
@@ -301,6 +314,7 @@
       mapName: "",
       historyJobs: [],
       historyFilter: "",
+      regionNames: [],
       currentJobId: null,
 
       get west() {
@@ -314,6 +328,11 @@
       },
       get north() {
         return this.bbox ? fmt(this.bbox.north) : "—";
+      },
+
+      get regionsHint() {
+        if (!this.regionNames.length) return "";
+        return `Downloaded and outlined on the map: ${this.regionNames.join(", ")}. A preview can only be built inside them.`;
       },
 
       get filteredHistoryJobs() {
@@ -364,6 +383,14 @@
         });
 
         map.addControl(new GotoControl());
+
+        // Above the basemap (tilePane, 200) and below everything drawn on it
+        // (overlayPane, 400), and deaf to the mouse: a click over a region is
+        // a click on the map, which is what the draw tool is waiting for.
+        map.createPane(REGIONS_PANE);
+        map.getPane(REGIONS_PANE).style.zIndex = 390;
+        map.getPane(REGIONS_PANE).style.pointerEvents = "none";
+        this.loadRegions();
 
         drawnItems = new L.FeatureGroup().addTo(map);
         drawControl = new L.Control.Draw({
@@ -437,6 +464,30 @@
           this.setStatus("running", `Restoring job ${saved.jobId}…`);
           this.pollJob(saved.jobId);
         }
+      },
+
+      // The covered area, drawn once at startup: which regions the service has
+      // downloaded only changes when the tile job brings a new one in.
+      async loadRegions() {
+        let data = null;
+        try {
+          const res = await fetch("/regions");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = await res.json();
+        } catch (err) {
+          console.warn("could not load the region outlines", err);
+          return;
+        }
+        const features = (data && data.features) || [];
+        if (!features.length) return;
+        regionsLayer = L.geoJSON(data, {
+          pane: REGIONS_PANE,
+          interactive: false,
+          style: () => REGION_STYLE,
+        }).addTo(map);
+        this.regionNames = features
+          .map((feature) => (feature.properties && feature.properties.name) || "")
+          .filter(Boolean);
       },
 
       async loadStyleSpec() {
