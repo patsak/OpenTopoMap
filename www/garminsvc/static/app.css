@@ -44,6 +44,14 @@ html, body {
 
 .muted { color: var(--muted); font-size: 0.85rem; }
 
+.repo {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(47, 93, 58, 0.35);
+}
+
+.repo:hover { color: var(--accent-hover); border-bottom-color: var(--accent-hover); }
+
 /* The swatch matches REGION_STYLE in app.js: the outlines of the downloaded
    regions, so the line in the panel is recognisable as the one on the map. */
 .hint.regions::before {
