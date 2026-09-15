@@ -213,8 +213,11 @@
       attribution: spec.attribution,
       style: otmVectorStyle({
         // Zoom range and coverage come out of the file header, so MapLibre
-        // asks for nothing outside the area that was built.
-        url: `pmtiles://${preview.tiles}`,
+        // asks for nothing outside the area that was built. The service hands
+        // out a same-origin path now that one nginx serves both the page and
+        // the previews; pmtiles fetches whatever follows the scheme, so it has
+        // to be absolute by the time it gets there.
+        url: `pmtiles://${absoluteUrl(preview.tiles)}`,
         attribution: spec.attribution,
         dem: spec.dem ? { ...spec.dem, tiles: absoluteUrl(spec.dem.tiles) } : undefined,
         sprite: absoluteUrl(spec.sprite),

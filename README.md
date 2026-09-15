@@ -15,7 +15,7 @@ docker compose up -d --build
 docker compose run --rm tilesvc-job python -m tilesvc
 ```
 
-Map UI: `http://localhost:8080/`. Built previews: `http://localhost:8081/<id>.pmtiles`.
+Everything is on one origin, behind the stack's nginx: map UI at `http://localhost:8080/`, built previews under `http://localhost:8080/previews/<id>.pmtiles`.
 
 ### Tools
 

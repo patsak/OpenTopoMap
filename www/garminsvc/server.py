@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT.parent))
 
 from flask import Flask, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from garminsvc.client import CLIENT_COOKIE, CLIENT_COOKIE_MAX_AGE, resolve_client_id
 from garminsvc.constants import GEOFABRIK_CACHE, JOBS_DIR, MAX_UPLOAD_BYTES, PREVIEWS_DIR
@@ -49,6 +50,16 @@ STATIC_DIR = ROOT / "static"
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES + 1024 * 1024
 app.config["MAX_FORM_MEMORY_SIZE"] = 16 * 1024 * 1024
+
+if os.environ.get("OTM_TRUST_PROXY", "").strip() not in ("", "0"):
+    # In the stack nothing reaches this process directly: www/nginx.conf is the
+    # only thing bound to a host port (see docker-compose.yml). Without this the
+    # peer would be that container for every request - the client cookie below
+    # would never be marked Secure behind a TLS terminator, and every line of
+    # the access log would carry the proxy's address instead of the caller's.
+    # Off unless asked for: with nothing in front of the process, X-Forwarded-*
+    # is whatever the caller chose to send.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 @app.before_request
@@ -263,6 +274,19 @@ def get_preview(preview_id: str):
             # handing the browser a URL that 404s inside MapLibre.
             return jsonify({"error": "This preview has been pruned, build it again"}), 410
     return jsonify(_preview_payload(preview))
+
+
+@app.get("/previews/<path:name>")
+def preview_tiles(name: str):
+    """A built preview file, for a service running on its own.
+
+    In the stack nginx answers /previews/ off the shared volume and never
+    proxies it here (www/nginx.conf) - this is what makes ``python -m
+    garminsvc.server`` on a laptop, with no nginx in front, serve the same
+    same-origin URL ``preview_tiles_url`` hands out. ``send_from_directory``
+    supports Range, which is the only way a .pmtiles is read at all.
+    """
+    return send_from_directory(PREVIEWS_DIR, name, conditional=True)
 
 
 @app.get("/regions")

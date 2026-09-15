@@ -22,6 +22,7 @@ plus the TYP files `garmin/style/typ/opentopomap-hike.txt` and
 | `www/tilesvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
 | `www/tilesvc/sql/` | the metadata schema in Postgres (osc sequences, regions, revisions) |
 | `www/otmlib/` | Geofabrik (downloads, osc, bbox cutting), DEM, metadata |
+| `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to garminsvc |
 | `www/garminsvc/vectorbasemap.py` | the same cartography inside the Garmin build service |
 
 ## How it works
@@ -86,8 +87,10 @@ docker compose up -d --build
 docker compose run --rm tilesvc-job python -m tilesvc
 ```
 
-The map is at `http://localhost:8080/`; built previews are served from
-`http://localhost:8081/<preview id>.pmtiles`.
+The map is at `http://localhost:8080/`, and so is everything else: nginx is the
+only service bound to a host port (`www/nginx.conf`). It serves the built
+previews from `/previews/<preview id>.pmtiles` off the shared volume and proxies
+the rest — the page, the API, the style assets — to garminsvc.
 
 The first run downloads the full extracts of the regions listed in
 `www/tilesvc/config.yaml` — a federal district is a few gigabytes, so it takes a
@@ -107,8 +110,8 @@ Settings:
 | `OTM_TILEMAKER_THREADS` | cores minus two | tilemaker threads |
 | `OTM_TILEMAKER_BIN` | `tilemaker` on `PATH` | a different tilemaker binary |
 | `OTM_TILESVC_MEM` | `6g` | memory limit of the job container |
-| `OTM_PREVIEW_PORT` | `8081` | port of the nginx that serves `data/previews/*.pmtiles` |
-| `OTM_PREVIEW_PUBLIC_URL` | `http://127.0.0.1:8081` | the same address, as the browser sees it |
+| `OTM_PORT` | `8080` | host port of the nginx in front of the whole stack |
+| `OTM_PREVIEW_PUBLIC_URL` | `/previews` | where the browser reads previews from; an absolute URL only if they are published under a host of their own |
 | `OTM_PREVIEW_MEM` | `4g` | memory limit of the preview worker |
 
 The job takes only `--config`: bringing the PBFs and their sequences up to date

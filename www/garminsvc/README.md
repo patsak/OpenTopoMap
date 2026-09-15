@@ -11,7 +11,8 @@ repository root by default). What it shares with [`tilesvc`](../tilesvc)
 
 The whole stack is easiest to bring up with compose — one file in
 [`www/`](..) covers every service, and it also brings Postgres, tilesvc, the
-preview worker and the nginx that serves the previews:
+preview worker and the nginx in front of all of it (`www/nginx.conf`: the
+previews off the shared volume, everything else proxied here):
 
 ```bash
 cd .. && docker compose up -d --build
@@ -101,8 +102,8 @@ POST /preview {bbox} ──► otm.map_previews (queued) ──► huey queue "o
                           tilemaker (zooms 0–14) ──► data/previews/<id>.pmtiles
                                                               │
    GET /preview/<id> ◄── status, while the built file is read by the browser
-                         with range requests from nginx (`previews`, port 8081)
-                         through pmtiles://
+                         with range requests from nginx (`/previews/<id>.pmtiles`,
+                         same origin as the page) through pmtiles://
 ```
 
 The limits are deliberate:
@@ -149,7 +150,7 @@ tile borders.
 The bbox picker shows the public raster maps (OSM and friends) plus, once it has
 been built, the preview of the drawn area — see above. Flask serves only
 `/vector/config`, the style assets and the preview records; the tiles themselves
-come from nginx. For the cartography itself see
+come from nginx, which fronts both. For the cartography itself see
 [`www/README.md`](../README.md).
 
 ## Tests

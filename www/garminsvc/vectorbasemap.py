@@ -27,10 +27,12 @@ DEM_ATTRIBUTION = "DEM: © Mapterhorn"
 DEFAULT_DEM_MAXZOOM = 12
 DEFAULT_DEM_TILESIZE = 512
 DEFAULT_DEM_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"
-# Where the previews directory is published. The browser reads the .pmtiles
-# with range requests, so this has to be a URL it can reach directly - not a
-# path inside the container.
-DEFAULT_PREVIEW_PUBLIC_URL = "http://127.0.0.1:8081"
+# Where the previews directory is published. The browser reads the .pmtiles with
+# range requests, so this has to be something it can reach - not a path inside
+# the container. Everything is behind one nginx now (www/nginx.conf), so the
+# default is same-origin: a deployment only needs to set OTM_PREVIEW_PUBLIC_URL
+# when the previews are published under a host of their own.
+DEFAULT_PREVIEW_PUBLIC_URL = "/previews"
 
 
 def style_dir() -> Path | None:
@@ -45,7 +47,11 @@ def _public_url(env_var: str, default: str) -> str:
 
 
 def preview_tiles_url(tiles_file: str) -> str:
-    """Absolute URL of one built preview file."""
+    """Where the browser reads one built preview file from.
+
+    A same-origin path by default (nginx serves ``/previews/`` off the shared
+    volume); an absolute URL when OTM_PREVIEW_PUBLIC_URL names another host.
+    """
     base = _public_url("OTM_PREVIEW_PUBLIC_URL", DEFAULT_PREVIEW_PUBLIC_URL)
     return f"{base}/{tiles_file}"
 

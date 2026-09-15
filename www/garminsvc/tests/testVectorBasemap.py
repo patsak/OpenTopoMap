@@ -70,10 +70,12 @@ class TestPreviewUrl(VectorBasemapCase):
             "http://previews.example:8081/abc123.pmtiles",
         )
 
-    def testFallsBackToTheLocalNginx(self):
+    def testFallsBackToTheSameOriginPath(self):
+        # Unset, the previews come from the same nginx as the page, so the
+        # browser needs nothing but the path (www/nginx.conf).
         with mock.patch.dict(os.environ, {"OTM_PREVIEW_PUBLIC_URL": ""}):
             url = vectorbasemap.preview_tiles_url("abc123.pmtiles")
-        self.assertTrue(url.startswith(vectorbasemap.DEFAULT_PREVIEW_PUBLIC_URL))
+        self.assertEqual(url, "/previews/abc123.pmtiles")
 
     def testATrailingSlashDoesNotDoubleUp(self):
         with mock.patch.dict(os.environ, {"OTM_PREVIEW_PUBLIC_URL": "https://maps.example/p/"}):
