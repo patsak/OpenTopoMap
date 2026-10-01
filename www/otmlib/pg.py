@@ -11,6 +11,9 @@ import psycopg
 
 DEFAULT_DATABASE_URL = "postgresql://otm:otm@localhost:5432/otm"
 
+# Tables both services read or write: previews, regions, replication state.
+SHARED_SQL_DIR = Path(__file__).resolve().parent / "sql"
+
 
 def database_url() -> str:
     return os.environ.get("DATABASE_URL", "").strip() or DEFAULT_DATABASE_URL
@@ -29,6 +32,9 @@ def connection(**kwargs) -> Iterator[psycopg.Connection]:
 def run_sql_files(conn: psycopg.Connection, directory: Path) -> None:
     """Apply numbered ``*.sql`` files in *directory* (001_…, 002_…)."""
     files = sorted(directory.glob("*.sql"))
+    if not files:
+        # A wrong path would otherwise "succeed" and leave the tables missing.
+        raise FileNotFoundError(f"no *.sql files in {directory}")
     for path in files:
         conn.execute(path.read_text(encoding="utf-8"))
     conn.commit()
@@ -37,3 +43,8 @@ def run_sql_files(conn: psycopg.Connection, directory: Path) -> None:
 def ensure_schema(sql_dir: Path) -> None:
     with connection() as conn:
         run_sql_files(conn, sql_dir)
+
+
+def ensure_shared_schema() -> None:
+    """Create the otmlib-owned tables. Every service calls this on start."""
+    ensure_schema(SHARED_SQL_DIR)

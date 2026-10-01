@@ -1,5 +1,9 @@
 -- Metadata for the tile pipeline. Nothing here is tile data.
 --
+-- Written by tilesvc-job, read by garminsvc too (which regions a drawn bbox may
+-- be previewed in, and their outlines on the map), so it sits in otmlib and is
+-- created by whichever service starts first rather than by the nightly job.
+--
 -- The tiles themselves are built per drawn bbox into a .pmtiles file
 -- (tilemaker, see www/otmlib/tilemaker.py) that nginx serves straight off
 -- disk. Postgres only remembers what has already been done: how far each

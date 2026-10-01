@@ -20,8 +20,8 @@ from urllib.parse import urlsplit, urlunsplit
 import pytest
 
 WWW = Path(__file__).resolve().parent
-# otmlib/sql holds what both services share (the preview records).
-SCHEMA_DIRS = (WWW / "otmlib/sql", WWW / "tilesvc/sql", WWW / "garminsvc/sql")
+# otmlib/sql holds what both services share (previews, regions, replication).
+SCHEMA_DIRS = (WWW / "otmlib/sql", WWW / "garminsvc/sql")
 
 
 def _with_dbname(url: str, dbname: str) -> str:

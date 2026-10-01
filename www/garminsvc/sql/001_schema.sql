@@ -1,6 +1,6 @@
 -- Garmin build-service job records.
 --
--- Own schema, same database as the tile metadata (www/tilesvc/sql/001_schema.sql):
+-- Own schema, same database as the tile metadata (www/otmlib/sql/):
 -- one Postgres for both services, and huey's own huey_* tables land in public.
 -- Applied by otmlib.pg.ensure_schema() on service start.
 

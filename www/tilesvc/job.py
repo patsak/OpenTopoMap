@@ -9,7 +9,6 @@ rendered here: tiles are built per drawn bbox, on demand, by
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from otmlib import pg, pgmeta, regionsync
 from otmlib.geofabrik import region_by_id
@@ -19,10 +18,6 @@ from tilesvc.config import Config
 log = logging.getLogger(__name__)
 
 
-def sql_dir() -> Path:
-    return Path(__file__).resolve().parent / "sql"
-
-
 def sync_regions(cfg: Config) -> list[regionsync.SyncResult]:
     """Resolve the configured regions and bring their cached PBFs up to date.
 
@@ -30,7 +25,7 @@ def sync_regions(cfg: Config) -> list[regionsync.SyncResult]:
     place by ``osmium apply-changes``, from the sequence tracked in
     ``otm.replication_state`` (see :mod:`otmlib.regionsync`).
     """
-    pg.ensure_schema(sql_dir())
+    pg.ensure_shared_schema()
     cfg.geofabrik_cache.mkdir(parents=True, exist_ok=True)
     regions = [
         region_by_id(

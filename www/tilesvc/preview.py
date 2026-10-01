@@ -17,7 +17,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from otmlib import paths, previews, previewqueue, regionsync
+from otmlib import paths, pg, previews, previewqueue, regionsync
 from otmlib import tilemaker as runner
 from otmlib.geofabrik import extract_bbox
 from otmlib.proc import check_cancelled
@@ -179,7 +179,7 @@ def recover(cfg: Config | None = None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    previews.ensure_schema()
+    pg.ensure_shared_schema()
     recover()
     log.info("Preview worker ready, waiting for jobs")
     # One worker: tilemaker already uses every core it is given, so a second

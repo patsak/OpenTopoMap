@@ -40,7 +40,7 @@ from garminsvc.jobs import job_manager
 from garminsvc.osmfile import UploadError, normalize_upload_name, save_upload_stream
 from garminsvc.vectorbasemap import LAYERS_ASSET, preview_tiles_url, style_dir
 from garminsvc.vectorbasemap import config as vector_config
-from otmlib import previewqueue, previews, regionsync
+from otmlib import pg, previewqueue, previews, regionsync
 from otmlib.bbox import parse_bbox
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -341,7 +341,7 @@ def prepare() -> None:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
 
-    previews.ensure_schema()
+    pg.ensure_shared_schema()
     job_manager.start()
     log.info("Dependencies OK (mkgmap=%s, splitter=%s)", deps.mkgmap_jar, deps.splitter_jar)
 

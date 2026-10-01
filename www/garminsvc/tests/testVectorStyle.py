@@ -238,6 +238,75 @@ class TestBooleanAttributes(unittest.TestCase):
             self.assertIn(f'AttributeBoolean("{name}", true)', lua)
 
 
+class TestRiverLabels(unittest.TestCase):
+    """River names are an orientation aid: they come early, are larger than a
+    stream's and win label collisions against street names."""
+
+    def setUp(self):
+        self.layers = styleLayers()
+        self.byId = {layer["id"]: layer for layer in self.layers}
+        self.lua = PROCESS_LUA.read_text(encoding="utf-8")
+
+    def testRiverLabelsArePlacedBeforeStreetNames(self):
+        """MapLibre places symbols from the top layer down, so later wins."""
+        ids = [layer["id"] for layer in self.layers]
+        self.assertGreater(ids.index("water-line-labels"), ids.index("street-names"))
+
+    def testRiversAreNamedFromZ10(self):
+        body = self.lua.split("function process_water_lines", 1)[1].split("\nfunction ", 1)[0]
+        self.assertIn("mz_label = math.max(10, zmin_for_length(0.25))", body)
+        self.assertLessEqual(configLayer(CONFIG_REGION, "water_lines_labels")["minzoom"], 10)
+
+    def testARiverNameIsLargerThanAStreamName(self):
+        size = self.byId["water-line-labels"]["layout"]["text-size"]
+        stops = size[3:]
+        for value in stops[1::2]:
+            self.assertEqual(value[:3], ["match", ["get", "type"], ["river", "canal"]])
+            self.assertGreater(value[3], value[4])
+
+    def testAWindingRiverStillGetsAName(self):
+        """At the 45° default a braided mountain river drops its label at most zooms."""
+        self.assertGreater(self.byId["water-line-labels"]["layout"].get("text-max-angle", 45), 45)
+
+    def testGarminRiverLabelIsNotSmallFont(self):
+        typ = (REPO / "garmin/style/typ/opentopomap-hike.txt").read_text(encoding="utf-8")
+        river = typ.split("Type=0x1f\n", 1)[1].split("[end]", 1)[0]
+        self.assertIn("FontStyle=NormalFont", river)
+
+
+class TestTrailVisibility(unittest.TestCase):
+    """A path with trail_visibility below intermediate is dashed more sparsely,
+    on the web map and on the Garmin map alike."""
+
+    FAINT = ["bad", "horrible", "no"]
+
+    def setUp(self):
+        self.layers = {layer["id"]: layer for layer in styleLayers()}
+
+    def testFaintTrailsHaveTheirOwnLayer(self):
+        plain = self.layers["footpaths"]
+        faint = self.layers["footpaths-faint"]
+        self.assertIn(["match", ["get", "trail_visibility"], self.FAINT, False, True], plain["filter"])
+        self.assertIn(["match", ["get", "trail_visibility"], self.FAINT, True, False], faint["filter"])
+        plainDash = plain["paint"]["line-dasharray"]
+        faintDash = faint["paint"]["line-dasharray"]
+        self.assertGreater(faintDash[1] / faintDash[0], plainDash[1] / plainDash[0])
+
+    def testTheLuaWritesTrailVisibility(self):
+        lua = PROCESS_LUA.read_text(encoding="utf-8")
+        self.assertIn('Attribute("trail_visibility", trail_visibility)', lua)
+        for value in self.FAINT:
+            self.assertIn(f'"{value}"', lua.split("trail_visibility_values = Set", 1)[1].split("\n", 1)[0])
+
+    def testGarminDrawsFaintTrailsWithTheirOwnType(self):
+        lines = (REPO / "garmin/style/opentopomap-hike/lines").read_text(encoding="utf-8")
+        rule = next(line for line in lines.splitlines() if "trail_visibility" in line and "[0x" in line)
+        self.assertIn("[0x0e road_class=0", rule)
+        self.assertLess(lines.index(rule), lines.index("highway=footway|highway=path [0x16"))
+        typ = (REPO / "garmin/style/typ/opentopomap-hike.txt").read_text(encoding="utf-8")
+        self.assertIn("[_line]\nType=0x0e\n", typ)
+
+
 class TestOceanLayer(unittest.TestCase):
     def testOceanIsNotReadFromTheRegionalOsmTileset(self):
         """The regional config has no ocean layer; a second tileset carries the sea."""

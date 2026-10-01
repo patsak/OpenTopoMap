@@ -20,7 +20,7 @@ plus the TYP files `garmin/style/typ/opentopomap-hike.txt` and
 | `maplibregljs/otm_style.js` | assembles the style: sources, Mapterhorn, contours, sprite |
 | `www/tilesvc/` | the job: Geofabrik → PBF, kept current from the diffs |
 | `www/tilesvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
-| `www/tilesvc/sql/` | the metadata schema in Postgres (osc sequences, regions, revisions) |
+| `www/otmlib/sql/` | the metadata schema in Postgres (osc sequences, regions, previews) |
 | `www/otmlib/` | Geofabrik (downloads, osc, bbox cutting), DEM, metadata |
 | `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to garminsvc |
 | `www/garminsvc/vectorbasemap.py` | the same cartography inside the Garmin build service |

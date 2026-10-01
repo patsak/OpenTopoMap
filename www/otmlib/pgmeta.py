@@ -1,6 +1,6 @@
 """Tile-pipeline metadata in Postgres: replication position, regions, builds.
 
-The tables are defined in ``www/tilesvc/sql/001_schema.sql``; that file's header
+The tables are defined in ``www/otmlib/sql/002_pipeline.sql``; that file's header
 explains why they are the only thing this pipeline keeps in a database. Every
 function here takes an optional open connection so a caller can do a whole
 region's read-apply-write inside one transaction, and opens its own otherwise.

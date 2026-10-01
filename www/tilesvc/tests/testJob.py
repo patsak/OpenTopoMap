@@ -28,7 +28,7 @@ class JobCase(unittest.TestCase):
         self.region = mock.Mock(region_id="test")
 
         patches = [
-            mock.patch("tilesvc.job.pg.ensure_schema"),
+            mock.patch("tilesvc.job.pg.ensure_shared_schema"),
             mock.patch("tilesvc.job.pgmeta.prune_regions"),
             mock.patch("tilesvc.job.region_by_id", return_value=self.region),
             mock.patch("tilesvc.job.regionsync.sync_regions", return_value=[syncResult()]),

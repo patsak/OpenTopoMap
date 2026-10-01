@@ -1,4 +1,4 @@
-"""Job records in Postgres (schema ``otm_garmin``, see ../sql/001_schema.sql).
+"""Job records in Postgres (schema ``otm_garmin``, see sql/001_schema.sql).
 
 The queue lives in the same database, in huey's own tables (see
 :mod:`garminsvc.tasks`), so the service has one piece of state to back up and
@@ -26,7 +26,7 @@ from garminsvc.constants import (
 )
 from otmlib import pg
 
-SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 _local = threading.local()
 

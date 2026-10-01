@@ -28,6 +28,12 @@ def job(jobId="j1", **overrides):
     return Job(**fields)
 
 
+def testTheSchemaDirectoryIsTheOneShippedWithThePackage():
+    # conftest applies the schema itself, so a stale SQL_DIR passes every
+    # database test and only fails on a fresh deployment.
+    assert (storage.SQL_DIR / "001_schema.sql").is_file()
+
+
 @pytest.fixture()
 def store(pgDatabase):
     storage.ensure_schema()

@@ -20,8 +20,6 @@ from otmlib import pg
 
 log = logging.getLogger(__name__)
 
-SQL_DIR = Path(__file__).resolve().parent / "sql"
-
 QUEUED = "queued"
 RUNNING = "running"
 DONE = "done"
@@ -105,10 +103,6 @@ class Preview:
             "expires_in_seconds": round(self.expires_in_seconds()),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
-
-
-def ensure_schema() -> None:
-    pg.ensure_schema(SQL_DIR)
 
 
 def round_bbox(

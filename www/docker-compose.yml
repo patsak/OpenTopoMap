@@ -20,7 +20,7 @@ name: garminsvc
 
 services:
   # Plain Postgres: nothing here stores geometry any more (region coverage is
-  # four floats, see www/tilesvc/sql/001_schema.sql), and no query renders a
+  # four floats, see www/otmlib/sql/002_pipeline.sql), and no query renders a
   # tile - so no PostGIS, and none of the shared_buffers / shm_size / prewarm
   # tuning that a per-request ST_AsMVT pipeline needed.
   postgres:
