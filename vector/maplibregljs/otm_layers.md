@@ -21,7 +21,7 @@ Palette (TYP type in brackets):
 - water `#9DD4E8` [0x32 0x3c] / lines and labels `#2A6A9A` [0x18 0x1f]
 - glacier `#FFFFFF` [0x4d] / crevasse `#2A6A9A` [0x34 0x35]
 - roads `#C43C32` [0x01-0x03] / `#E8B84A` [0x04 0x08] / `#F5E8C0` [0x05 0x06]
-- trails: track `#6B4423` [0x07 0x0a] / footpath and steps `#000000` [0x16 0x13]
+- trails: track `#6B4423` [0x07 0x0a] / footpath, faint trail and steps `#000000` [0x16 0x0e 0x13]
 - contours `#C07848` / `#A86038` / `#8B4518` [0x20-0x22]
 
 Data from `tilemaker/process-otm.lua` (source `opentopomap-vector`), which
@@ -95,6 +95,13 @@ intermittent water needs its own layer.
 Genshtab colours with a black casing on every driveable road; trails and
 tracks are dashes without casing, exactly like the Garmin line types.
 
+**footpaths-faint** — A path or footway with `trail_visibility` below
+`intermediate` (bad, horrible, no) is the same black dash with twice the gap,
+so a trail that is hard to find on the ground reads as such on the map. Garmin
+draws it as its own type 0x0e with the same sparse dash. The tile carries
+`trail_visibility` only on paths and footways; line-dasharray cannot be
+data-driven, hence the second layer.
+
 ### Symbols and labels
 
 **poi-symbols** — Sprite images already carry their intended screen size
@@ -120,4 +127,14 @@ keeps a nameless lake from getting an empty first line and a name-only lake
 from getting a stray `0`.
 
 **water-line-labels** — Its own layer, with a later per-feature floor than the
-line itself: a river is drawn from z7 but only worth naming from z12.
+line itself: a river is drawn from z7 and named from z10. River names are an
+orientation aid (which valley, which bank), so rivers and canals get a larger
+letter-spaced italic — the Genshtab convention for hydrography — a heavier
+halo and more frequent repeats than streams, and the layer sits above
+street-names so a river name wins a collision with a street name. The name is
+set beside the line rather than on it, so the river does not strike it
+through. `text-max-angle` is raised to 75: a braided mountain river bends more
+than the 45° default allows across the length of its name, and with the
+default such a river — the one that most needs a name — went unlabelled at
+most zooms. The Garmin
+river type 0x1f uses NormalFont instead of SmallFont for the same reason.

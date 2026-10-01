@@ -2476,6 +2476,19 @@ Xpm="0 0 2 0"
 [end]
 
 [_line]
+Type=0x0e
+String=0x02,Pfad (undeutlich)
+String=0x04,faint trail
+ExtendedLabels=Y
+FontStyle=SmallFont
+Xpm="32 2 2 1"
+"  c none"
+"# c #000000"
+"##      ##      ##      ##      "
+"##      ##      ##      ##      "
+[end]
+
+[_line]
 Type=0x13
 String=0x02,Treppe/Stufen
 String=0x04,steps
@@ -2576,7 +2589,7 @@ Type=0x1f
 String=0x02,Fluss
 String=0x04,river
 ExtendedLabels=Y
-FontStyle=SmallFont
+FontStyle=NormalFont
 CustomColor=Day
 DaycustomColor=#2A6A9A
 LineWidth=3

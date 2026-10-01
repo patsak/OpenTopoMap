@@ -471,7 +471,9 @@ function process_water_lines()
 	mz = inf_zoom
 	if kind == "river" or kind == "canal" then
 		mz = math.max(7, zmin_for_length(0.25))
-		mz_label = math.max(12, zmin_for_length(0.25))
+		-- hike: a river name is a primary orientation aid (which valley am I
+		-- in?), so it comes two levels earlier than in the plain schema.
+		mz_label = math.max(10, zmin_for_length(0.25))
 	--elseif kind == "canal" then
 	--	mz = 10
 	--	mz_label = 13
@@ -733,6 +735,10 @@ function toIntermittentBool(intermittent)
 	return false
 end
 
+-- hike: trail_visibility of paths and footways; the style dashes everything
+-- below "intermediate" more sparsely, as the Garmin map does.
+trail_visibility_values = Set { "excellent", "good", "intermediate", "bad", "horrible", "no" }
+
 function process_streets()
 	local min_zoom_layer = 5
 	local mz = inf_zoom
@@ -744,6 +750,10 @@ function process_streets()
 	local bicycle = Find("bicycle")
 	local horse = Find("horse")
 	local tracktype = Find("tracktype")
+	local trail_visibility = ""
+	if highway == "path" or highway == "footway" then
+		trail_visibility = valueAcceptedOrNil(trail_visibility_values, Find("trail_visibility")) or ""
+	end
 	local tunnelBool = toTunnelBool(Find("tunnel"), Find("covered"))
 	local covered = Find("covered")
 	local service = Find("service")
@@ -863,6 +873,9 @@ function process_streets()
 		addAttributeOrEmptyStr("surface")
 		addAttributeOrEmptyStr("tracktype")
 		addAttributeOrEmptyStr("service")
+		if trail_visibility ~= "" then
+			Attribute("trail_visibility", trail_visibility)
+		end
 		if rail == true then
 			AttributeBoolean("rail", true)
 		end
@@ -905,6 +918,9 @@ function process_streets()
 		addAttributeOrEmptyStr("surface")
 		addAttributeOrEmptyStr("tracktype")
 		addAttributeOrEmptyStr("service")
+		if trail_visibility ~= "" then
+			Attribute("trail_visibility", trail_visibility)
+		end
 		if rail == true then
 			AttributeBoolean("rail", true)
 		end

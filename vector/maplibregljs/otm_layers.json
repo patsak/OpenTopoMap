@@ -1572,10 +1572,34 @@
     "source-layer": "streets",
     "minzoom": 11,
     "filter": [
-      "in",
-      "type",
-      "path",
-      "footway"
+      "all",
+      [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "path",
+          "footway"
+        ],
+        true,
+        false
+      ],
+      [
+        "match",
+        [
+          "get",
+          "trail_visibility"
+        ],
+        [
+          "bad",
+          "horrible",
+          "no"
+        ],
+        false,
+        true
+      ]
     ],
     "type": "line",
     "paint": {
@@ -1598,6 +1622,65 @@
       "line-dasharray": [
         3,
         2
+      ]
+    }
+  },
+  {
+    "id": "footpaths-faint",
+    "source": "opentopomap-vector",
+    "source-layer": "streets",
+    "minzoom": 11,
+    "filter": [
+      "all",
+      [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "path",
+          "footway"
+        ],
+        true,
+        false
+      ],
+      [
+        "match",
+        [
+          "get",
+          "trail_visibility"
+        ],
+        [
+          "bad",
+          "horrible",
+          "no"
+        ],
+        true,
+        false
+      ]
+    ],
+    "type": "line",
+    "paint": {
+      "line-color": "#000000",
+      "line-width": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "zoom"
+        ],
+        11,
+        0.9,
+        14,
+        1.7,
+        17,
+        2.8
+      ],
+      "line-dasharray": [
+        3,
+        6
       ]
     }
   },
@@ -2193,40 +2276,6 @@
     }
   },
   {
-    "id": "water-line-labels",
-    "source": "opentopomap-vector",
-    "source-layer": "water_lines_labels",
-    "metadata": {
-      "translate": true
-    },
-    "type": "symbol",
-    "layout": {
-      "symbol-placement": "line",
-      "text-field": "{name}",
-      "text-font": [
-        "Noto Sans Regular"
-      ],
-      "text-size": [
-        "interpolate",
-        [
-          "linear"
-        ],
-        [
-          "zoom"
-        ],
-        13,
-        9,
-        18,
-        11
-      ]
-    },
-    "paint": {
-      "text-color": "#2A6A9A",
-      "text-halo-color": "rgba(243,230,196,0.7)",
-      "text-halo-width": 1.2
-    }
-  },
-  {
     "id": "street-names",
     "source": "opentopomap-vector",
     "source-layer": "street_labels",
@@ -2259,6 +2308,150 @@
       "text-color": "#2A2A2A",
       "text-halo-color": "rgba(243,230,196,0.9)",
       "text-halo-width": 1.5
+    }
+  },
+  {
+    "id": "water-line-labels",
+    "source": "opentopomap-vector",
+    "source-layer": "water_lines_labels",
+    "metadata": {
+      "translate": true
+    },
+    "type": "symbol",
+    "layout": {
+      "symbol-placement": "line",
+      "symbol-spacing": 200,
+      "text-max-angle": 75,
+      "text-field": "{name}",
+      "text-font": [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "river",
+          "canal"
+        ],
+        [
+          "literal",
+          [
+            "Noto Sans Italic"
+          ]
+        ],
+        [
+          "literal",
+          [
+            "Noto Sans Regular"
+          ]
+        ]
+      ],
+      "text-size": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "zoom"
+        ],
+        10,
+        [
+          "match",
+          [
+            "get",
+            "type"
+          ],
+          [
+            "river",
+            "canal"
+          ],
+          11,
+          9
+        ],
+        13,
+        [
+          "match",
+          [
+            "get",
+            "type"
+          ],
+          [
+            "river",
+            "canal"
+          ],
+          12.5,
+          9
+        ],
+        18,
+        [
+          "match",
+          [
+            "get",
+            "type"
+          ],
+          [
+            "river",
+            "canal"
+          ],
+          16,
+          11
+        ]
+      ],
+      "text-letter-spacing": [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "river",
+          "canal"
+        ],
+        0.15,
+        0
+      ],
+      "text-offset": [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "river",
+          "canal"
+        ],
+        [
+          "literal",
+          [
+            0,
+            -0.9
+          ]
+        ],
+        [
+          "literal",
+          [
+            0,
+            -0.7
+          ]
+        ]
+      ]
+    },
+    "paint": {
+      "text-color": "#2A6A9A",
+      "text-halo-color": "rgba(243,230,196,0.9)",
+      "text-halo-width": [
+        "match",
+        [
+          "get",
+          "type"
+        ],
+        [
+          "river",
+          "canal"
+        ],
+        1.8,
+        1.2
+      ]
     }
   },
   {
