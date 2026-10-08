@@ -10,7 +10,7 @@ network of the relief as it is.
     3. r.watershed       flow accumulation and drainage directions
     4. r.stream.extract  channels wherever the catchment reaches --catchment km2
     5. r.stream.order    Strahler / Horton / Shreve / Hack hierarchy
-    6. generalize and write GPKG/GeoJSON/Shapefile in EPSG:4326
+    6. smooth, generalize and write GPKG/GeoJSON/Shapefile in EPSG:4326
 
     ./dem2rivers.py --bbox 42.3 43.0 43.5 43.5 -o rivers.gpkg
     ./dem2rivers.py --dem ~/dem/caucasus --catchment 5 -o rivers.geojson
@@ -100,7 +100,10 @@ def extract_rivers(gs, dem_tif: Path, work_dir: Path, args) -> tuple[str, str] |
         log_hierarchy(gs, vector)
 
         res = (region["nsres"] + region["ewres"]) / 2
-        vector = demgrass.generalize(gs, vector, demgrass.resolve_simplify(args.simplify, res))
+        vector = demgrass.generalize(
+            gs, vector, demgrass.resolve_simplify(args.simplify, res, args.smooth),
+            smooth=args.smooth, res=res,
+        )
 
         lines = gs.vector_info_topo(vector)["lines"]
         log(f"river segments: {lines}, {demgrass.vertex_count(gs, vector)} vertices")
@@ -162,7 +165,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    demgrass.add_common_arguments(parser, default_output="rivers.gpkg", feature="channels")
+    demgrass.add_common_arguments(parser, default_output="rivers.gpkg", feature="channels",
+                                  smooth=2)
     parser.add_argument("--catchment", type=float, default=30.0, metavar="KM2",
                         help="drainage area a channel needs before it is drawn, in km2 "
                              "(default: 30)")
@@ -171,6 +175,8 @@ def main(argv=None) -> int:
     bbox = demgrass.normalize_bbox(parser, args)
     demgrass.quiet_grass(args.verbose)
     demgrass.resolve_simplify(args.simplify, 1.0)  # fail on a bad value before any work
+    if args.smooth < 0:
+        parser.error("--smooth cannot be negative")
     demgrass.validate_output(args.output, osm=False)
     if args.catchment <= 0:
         parser.error("--catchment must be positive")

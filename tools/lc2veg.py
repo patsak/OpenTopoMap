@@ -51,29 +51,11 @@ from veglib import COVER_SOURCES, NAMES, RASTER_SUFFIXES, OGR_DRIVERS, log
 gdal.UseExceptions()
 
 
-def working_grid(bbox, args) -> tuple[str, tuple[float, float, float, float]]:
-    """The CRS the classes are cut in, and the bbox expressed in it.
-
-    Metric, because --min-area is hectares and --simplify is metres; UTM of the
-    centre unless --crs says otherwise.
-    """
-    if args.crs == "auto":
-        centre = ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
-        crs = f"EPSG:{veglib.utm_epsg(*centre)}"
-    else:
-        crs = args.crs
-    bounds = veglib.reproject_bbox(bbox, veglib.spatial_reference("EPSG:4326"),
-                                   veglib.spatial_reference(crs))
-    snap = lambda value, up: (np.ceil if up else np.floor)(value / args.res) * args.res
-    return crs, (snap(bounds[0], False), snap(bounds[1], False),
-                 snap(bounds[2], True), snap(bounds[3], True))
-
-
 def cut_cover(bbox, args) -> Path:
     """The source tiles, fetched and warped onto the working grid."""
     source = args.source_file or veglib.fetch_cover(args.source, veglib.snap_bbox(bbox),
                                                    args.work, args.chunk, args.timeout)
-    crs, bounds = working_grid(bbox, args)
+    crs, bounds = veglib.working_grid(bbox, args.crs, args.res)
     width = (bounds[2] - bounds[0]) / 1000
     height = (bounds[3] - bounds[1]) / 1000
     log(f"area: {width:.1f} x {height:.1f} km in {crs} at {args.res:g} m")

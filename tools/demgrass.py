@@ -257,11 +257,13 @@ def vertex_count(gs, vector: str) -> int:
     return gs.vector_info_topo(name)["points"]
 
 
-def resolve_simplify(value: str, res: float) -> float:
+def resolve_simplify(value: str, res: float, smooth: int = 0) -> float:
     """--simplify in CRS units; 'auto' is 1.5 cells, which is where the vertex
-    count collapses while every kept vertex still sits on a traced cell."""
+    count collapses while every kept vertex still sits on a traced cell. After
+    smoothing it is 0.1 cell: only the near-collinear vertices chaiken leaves
+    behind go, anything coarser puts the corners back."""
     if value == "auto":
-        return 1.5 * res
+        return (0.1 if smooth else 1.5) * res
     try:
         threshold = float(value)
     except ValueError:
@@ -271,20 +273,51 @@ def resolve_simplify(value: str, res: float) -> float:
     return threshold
 
 
-def generalize(gs, vector: str, simplify: float) -> str:
+def generalize(gs, vector: str, simplify: float, smooth: int = 0, res: float = 0.0) -> str:
     """Douglas-Peucker only ever drops vertices, so what is left still lies on
-    the cells the raster traced; smoothing methods round the staircase but walk
-    the line off the feature, which is worse than a slightly angular line."""
-    if simplify <= 0:
+    the cells the raster traced - but a 1.5-cell tolerance leaves a corner every
+    few hundred metres.
+
+    smooth > 0 rounds them instead: that many sliding-average passes (5 vertices)
+    take the staircase out first, then chaiken cuts what corners remain down to
+    0.4-cell segments, then douglas thins the result. The order matters: chaiken
+    on the douglas polyline cuts each corner by a quarter of a long segment and
+    walks the line 100 m off a 30 m channel, while averaging the raw trace keeps
+    it within about a cell of it - closer than the angular douglas line, which
+    cuts the staircase along its chords. Line ends never move, so confluences
+    stay joined.
+    """
+    if not smooth and simplify <= 0:
         return vector
     before = vertex_count(gs, vector)
-    output = f"{vector}_gen"
-    gs.run_command(
-        "v.generalize", input=vector, output=output,
-        method="douglas", threshold=simplify, overwrite=True,
-    )
-    log(f"v.generalize douglas {simplify:.1f}: {before} -> {vertex_count(gs, output)} vertices")
-    return output
+    steps = []
+    for i in range(smooth):
+        output = f"{vector}_avg{i}"
+        # sliding_averaging ignores threshold, but v.generalize insists on one
+        gs.run_command(
+            "v.generalize", input=vector, output=output, method="sliding_averaging",
+            look_ahead=5, slide=0.5, threshold=1, overwrite=True,
+        )
+        vector = output
+    if smooth:
+        output = f"{vector}_chaiken"
+        gs.run_command(
+            "v.generalize", input=vector, output=output,
+            method="chaiken", threshold=0.4 * res, overwrite=True,
+        )
+        vector = output
+        steps.append(f"{smooth}x sliding_averaging, chaiken {0.4 * res:.1f}")
+    if simplify > 0:
+        output = f"{vector}_gen"
+        gs.run_command(
+            "v.generalize", input=vector, output=output,
+            method="douglas", threshold=simplify, overwrite=True,
+        )
+        vector = output
+        steps.append(f"douglas {simplify:.1f}")
+    if steps:
+        log(f"v.generalize {', '.join(steps)}: {before} -> {vertex_count(gs, vector)} vertices")
+    return vector
 
 
 def export_lines(gs, vector: str, path: Path) -> None:
@@ -415,10 +448,12 @@ def write_output(
 # --------------------------------------------------------------------------- CLI
 
 
-def add_common_arguments(parser, *, default_output: str, feature: str, osm: bool = False) -> None:
+def add_common_arguments(parser, *, default_output: str, feature: str, osm: bool = False,
+                         smooth: int = 0) -> None:
     """The arguments both tools share, worded for whichever feature is traced.
 
-    osm=True when the calling tool knows how to tag its lines for OSM.
+    osm=True when the calling tool knows how to tag its lines for OSM; smooth is
+    the tool's default --smooth.
     """
     parser.add_argument("--bbox", nargs=4, type=float, metavar=("W", "S", "E", "N"),
                         help="area in EPSG:4326; required unless --dem covers exactly it")
@@ -444,9 +479,13 @@ def add_common_arguments(parser, *, default_output: str, feature: str, osm: bool
                         help="MB per GRASS module (default: 2000)")
     parser.add_argument("--min-cells", type=int, default=0,
                         help=f"drop {feature} shorter than this many cells (default: 0)")
+    parser.add_argument("--smooth", type=int, default=smooth, metavar="N",
+                        help="sliding-average passes before chaiken rounds the corners; "
+                             f"0 keeps the angular douglas line (default: {smooth})")
     parser.add_argument("--simplify", default="auto", metavar="D",
                         help="v.generalize douglas tolerance in CRS units; 'auto' is "
-                             "1.5 cells, 0 keeps every raster vertex (default: auto)")
+                             "1.5 cells, or 0.1 cell after --smooth; 0 keeps every "
+                             "vertex (default: auto)")
     parser.add_argument("--work-dir", type=Path,
                         help="where the intermediates go (default: a temp dir next to the output)")
     parser.add_argument("--keep-work", action="store_true", help="do not delete the work dir")

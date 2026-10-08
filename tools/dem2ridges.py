@@ -102,7 +102,10 @@ def extract_ridges(gs, dem_tif: Path, work_dir: Path, args) -> tuple[str, str] |
             vector = sharp
 
         res = (region["nsres"] + region["ewres"]) / 2
-        vector = demgrass.generalize(gs, vector, demgrass.resolve_simplify(args.simplify, res))
+        vector = demgrass.generalize(
+            gs, vector, demgrass.resolve_simplify(args.simplify, res, args.smooth),
+            smooth=args.smooth, res=res,
+        )
 
         lines = gs.vector_info_topo(vector)["lines"]
         log(f"ridge lines: {lines}, {demgrass.vertex_count(gs, vector)} vertices")
@@ -184,6 +187,8 @@ def main(argv=None) -> int:
     bbox = demgrass.normalize_bbox(parser, args)
     demgrass.quiet_grass(args.verbose)
     demgrass.resolve_simplify(args.simplify, 1.0)  # fail on a bad value before any work
+    if args.smooth < 0:
+        parser.error("--smooth cannot be negative")
     demgrass.validate_output(args.output, osm=True)
     work_dir = demgrass.work_directory(args)
 

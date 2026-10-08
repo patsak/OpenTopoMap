@@ -98,7 +98,8 @@ COVER_SOURCES = {
 
 
 TOOLS_DIR = Path(__file__).resolve().parent
-PIP_NAMES = {"sklearn": "scikit-learn", "skimage": "scikit-image"}
+PIP_NAMES = {"sklearn": "scikit-learn", "skimage": "scikit-image",
+             "pystac_client": "pystac-client"}
 
 
 def log(message: str) -> None:
@@ -132,6 +133,22 @@ def require(*modules: str) -> None:
 def utm_epsg(lon: float, lat: float) -> int:
     """The UTM zone a point falls in - a metric CRS, so that a hectare is a hectare."""
     return (32600 if lat >= 0 else 32700) + int((lon + 180) / 6) % 60 + 1
+
+
+def working_grid(bbox, crs: str, res: float) -> tuple[str, tuple[float, float, float, float]]:
+    """The CRS a bbox is classified in, and the bbox expressed in it.
+
+    Metric, because --min-area is hectares and --simplify is metres; UTM of the
+    centre unless the caller names a CRS. The bounds are snapped out to whole
+    cells, so the same bbox always lands on the same grid.
+    """
+    if crs == "auto":
+        centre = ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+        crs = f"EPSG:{utm_epsg(*centre)}"
+    bounds = reproject_bbox(bbox, spatial_reference("EPSG:4326"), spatial_reference(crs))
+    snap = lambda value, up: (math.ceil if up else math.floor)(value / res) * res
+    return crs, (snap(bounds[0], False), snap(bounds[1], False),
+                 snap(bounds[2], True), snap(bounds[3], True))
 
 
 def snap_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
