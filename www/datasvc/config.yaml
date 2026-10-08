@@ -25,7 +25,7 @@ regions:
 # extracts changed (datasvc.job.build_gol). false skips the step.
 gol: true
 
-# Shared with garminsvc. Empty means OTM_DATA_DIR, then www/garminsvc/data.
+# Shared with mapsvc. Empty means OTM_DATA_DIR, then www/mapsvc/data.
 data_dir: ""
 
 # Read extracts from a local mirror instead of download.geofabrik.de. Empty

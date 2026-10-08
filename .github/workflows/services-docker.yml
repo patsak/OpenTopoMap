@@ -66,7 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest gdal=="$(gdal-config --version)"
-          python -m pip install -r www/garminsvc/requirements-server.txt
+          python -m pip install -r www/mapsvc/requirements-server.txt
           python -m pip install -r www/datasvc/requirements.txt
 
       - name: Run tests
@@ -86,8 +86,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: garminsvc
-            dockerfile: www/garminsvc/Dockerfile
+          - service: mapsvc
+            dockerfile: www/mapsvc/Dockerfile
           - service: datasvc
             dockerfile: www/datasvc/Dockerfile
     steps:

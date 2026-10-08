@@ -36,9 +36,9 @@ and osmium on `PATH` (or in `OTM_GOL_BIN` / `OTM_OSMIUM_BIN`):
 cd www
 python3 -m venv overpass/.venv
 overpass/.venv/bin/pip install -r overpass/requirements.txt
-overpass/.venv/bin/python -m otmlib.gol garminsvc/data/gol/armenia.gol \
-    garminsvc/data/geofabrik-cache/armenia-latest.osm.pbf
-OTM_OVERPASS_GOL=garminsvc/data/gol/armenia.gol overpass/.venv/bin/python -m overpass.server
+overpass/.venv/bin/python -m otmlib.gol mapsvc/data/gol/armenia.gol \
+    mapsvc/data/geofabrik-cache/armenia-latest.osm.pbf
+OTM_OVERPASS_GOL=mapsvc/data/gol/armenia.gol overpass/.venv/bin/python -m overpass.server
 curl -d '[out:json];node[amenity=pub](40.17,44.50,40.19,44.52);out 3;' \
     http://127.0.0.1:8080/api/interpreter
 ```

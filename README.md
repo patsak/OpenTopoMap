@@ -23,4 +23,4 @@ Command-line helpers for preparing topographic data for OSM: ridge lines from a 
 
 ### Garmin
 
-Offline maps for Garmin devices. License of the Garmin maps is CC-BY-NC-SA; reselling is not allowed. Manual build: [garmin/README.md](garmin/README.md). Bbox build service: [www/garminsvc](www/garminsvc).
+Offline maps for Garmin devices. License of the Garmin maps is CC-BY-NC-SA; reselling is not allowed. Manual build: [garmin/README.md](garmin/README.md). Bbox build service: [www/mapsvc](www/mapsvc).

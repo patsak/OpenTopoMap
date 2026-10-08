@@ -4,8 +4,8 @@ datasvc builds it as the last step of its nightly pass, right after the sync
 (datasvc.job.build_gol), so it follows the extracts without anything watching
 them. By hand, from www/:
 
-    python -m otmlib.gol garminsvc/data/gol/armenia.gol \\
-        garminsvc/data/geofabrik-cache/armenia-latest.osm.pbf
+    python -m otmlib.gol mapsvc/data/gol/armenia.gol \\
+        mapsvc/data/geofabrik-cache/armenia-latest.osm.pbf
 
 Several regions become one GOL, not one per region. A query then sees one
 dataset - a relation or a way crossing a district border is one element, as

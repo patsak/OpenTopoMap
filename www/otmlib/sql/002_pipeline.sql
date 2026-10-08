@@ -1,6 +1,6 @@
 -- Metadata for the tile pipeline. Nothing here is tile data.
 --
--- Written by datasvc-job, read by garminsvc too (which regions a drawn bbox may
+-- Written by datasvc-job, read by mapsvc too (which regions a drawn bbox may
 -- be previewed in, and their outlines on the map), so it sits in otmlib and is
 -- created by whichever service starts first rather than by the nightly job.
 --

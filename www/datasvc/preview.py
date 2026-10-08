@@ -39,7 +39,7 @@ MINZOOM = 0
 MAXZOOM = 14
 # How many previews stay on disk. Each is a cache of one look at one area, and
 # a 50x50 km bbox is tens of megabytes. How long one stays usable is the other
-# half of this and lives with the rows, since garminsvc applies it too:
+# half of this and lives with the rows, since mapsvc applies it too:
 # otmlib.previews.TTL_SECONDS.
 KEEP_PREVIEWS = 8
 
@@ -64,7 +64,7 @@ def _sync_inputs(cfg: Config, preview: previews.Preview, log_fn) -> list[Path]:
     """The configured regions this bbox falls into, brought up to date.
 
     Only configured regions: a preview is offered for the covered area alone
-    (garminsvc checks that before queueing), so anything else here would mean
+    (mapsvc checks that before queueing), so anything else here would mean
     downloading a fresh multi-gigabyte extract on a button press.
     """
     from shapely.geometry import box

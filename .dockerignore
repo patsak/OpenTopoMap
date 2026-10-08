@@ -1,10 +1,10 @@
 # Build context: repository root (OpenTopoMap/)
 # See www/docker-compose.yml
 
-www/garminsvc/data/
-www/garminsvc/output/
-www/garminsvc/.venv/
-www/garminsvc/.venv-*/
+www/mapsvc/data/
+www/mapsvc/output/
+www/mapsvc/.venv/
+www/mapsvc/.venv-*/
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
@@ -13,12 +13,12 @@ www/garminsvc/.venv-*/
 **/*.osm.pbf
 **/*.zip
 **/*.hgt
-# The Java tooling is installed by garminsvc/artifacts.py into OTM_TOOLS_DIR, and
+# The Java tooling is installed by mapsvc/artifacts.py into OTM_TOOLS_DIR, and
 # downloads land under data/, which is already excluded above. tools/ is only a
 # leftover from when they were unpacked into the source tree; nothing in it must
 # reach the image, least of all a jar without its lib/ directory, which runs
 # until it needs fastutil and then dies mid-build.
-www/garminsvc/tools/
+www/mapsvc/tools/
 .git/
 **/.venv/
 www/docker-compose.override.yml

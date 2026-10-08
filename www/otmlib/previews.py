@@ -3,7 +3,7 @@
 A preview is one bbox rendered with the same cartography the web map uses, as
 a single ``.pmtiles`` file nginx serves. This module owns the row; the queue is
 huey's (:mod:`otmlib.previewqueue`) and the building is
-:mod:`datasvc.preview`. Both services import this — garminsvc to create rows
+:mod:`datasvc.preview`. Both services import this — mapsvc to create rows
 and report them, the worker to advance them — so nothing here may import
 either.
 """
@@ -35,7 +35,7 @@ BBOX_DECIMALS = 5
 # that a keep-newest-N cap does not catch: the region PBF it was cut from has
 # had a night of diffs applied since, and the cartography it was rendered with
 # may have moved on. Past the TTL the same rectangle is built again instead of
-# reused (find_ready), garminsvc stops handing out its URL, and the row and its
+# reused (find_ready), mapsvc stops handing out its URL, and the row and its
 # file go on the next sweep (expire).
 TTL_SECONDS = 24 * 3600
 
@@ -85,7 +85,7 @@ class Preview:
 
     def to_dict(self) -> dict:
         """The JSON the picker polls. ``tiles_file`` becomes a URL upstream, in
-        garminsvc.vectorbasemap, which is the only place that knows where nginx
+        mapsvc.vectorbasemap, which is the only place that knows where nginx
         publishes the directory."""
         return {
             "preview_id": self.preview_id,

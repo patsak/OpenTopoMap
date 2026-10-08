@@ -68,7 +68,7 @@ def load(path: Path | None = None) -> Config:
     if not regions:
         raise ValueError(f"{source}: no regions configured; the job would produce nothing")
 
-    fallback = REPO_ROOT / "www/garminsvc/data"
+    fallback = REPO_ROOT / "www/mapsvc/data"
     data_dir = Path(raw["data_dir"]) if raw.get("data_dir") else paths.resolve_data_dir(fallback)
     geofabrik_mirror = Path(raw["geofabrik_mirror"]) if raw.get("geofabrik_mirror") else None
 

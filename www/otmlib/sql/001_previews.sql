@@ -1,7 +1,7 @@
 -- Bbox previews: one row per "show me this area in the OTM style" request.
 --
 -- Shared by both services, which is why the DDL sits in otmlib rather than in
--- either service's own sql/ directory: garminsvc creates the rows and serves
+-- either service's own sql/ directory: mapsvc creates the rows and serves
 -- their status over HTTP, the preview worker in the datasvc image claims them
 -- and builds the .pmtiles. The queue itself is huey's (see
 -- otmlib.previewqueue) - this table is the state the browser polls.

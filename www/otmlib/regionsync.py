@@ -3,7 +3,7 @@
 This is the join between the two halves of the pipeline: :mod:`otmlib.geofabrik`
 knows how to fetch and rewrite files but nothing about a database, and
 :mod:`otmlib.pgmeta` is the reverse. Both datasvc (its configured regions, as
-tilemaker input) and garminsvc (the leaf regions a bbox needs) sync through
+tilemaker input) and mapsvc (the leaf regions a bbox needs) sync through
 here, so a region shared by the two is downloaded, updated and tracked once.
 """
 
@@ -138,7 +138,7 @@ def configured_regions(
 
     ``otm.regions`` is kept equal to datasvc's config.yaml by prune_regions(),
     so this reads that list back and re-attaches the polygons from the cached
-    index — which is how garminsvc, which never sees config.yaml, can tell
+    index — which is how mapsvc, which never sees config.yaml, can tell
     whether a bbox is inside the covered area.
     """
     ids = {region_id for region_id, _ in pgmeta.list_regions()}

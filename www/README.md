@@ -22,8 +22,8 @@ plus the TYP files `garmin/style/typ/opentopomap-hike.txt` and
 | `www/datasvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
 | `www/otmlib/sql/` | the metadata schema in Postgres (osc sequences, regions, previews) |
 | `www/otmlib/` | Geofabrik (downloads, osc, bbox cutting), DEM, metadata |
-| `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to garminsvc |
-| `www/garminsvc/vectorbasemap.py` | the same cartography inside the Garmin build service |
+| `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to mapsvc |
+| `www/mapsvc/vectorbasemap.py` | the same cartography inside the map service |
 | `www/overpass/` | an Overpass API (`/api/interpreter`) over a GeoDesk GOL of one region — prototype, see its README |
 
 ## How it works
@@ -39,7 +39,7 @@ config.yaml ──► Geofabrik PBF (downloaded once)
                         │        (the last applied sequence lives in
                         │         otm.replication_state in Postgres)
                         │
-                        └─► on the "Preview" button in garminsvc:
+                        └─► on the "Preview" button in mapsvc:
                             osmium extract bbox ──► tilemaker (zooms 0–14)
                                     ──► data/previews/<id>.pmtiles ──► nginx ──┐
                                                                                 ├─► MapLibre
@@ -73,7 +73,7 @@ The Garmin build cuts its bbox out of the same PBFs (`osmium extract -s smart`,
 where `smart` keeps multipolygons whole across the bbox edge) — see
 `otmlib.geofabrik`. The `data/geofabrik-cache` directory is shared with datasvc,
 and so is the sequence tracking: a region datasvc already keeps current is only
-checked by garminsvc.
+checked by mapsvc.
 
 Relief on the web comes from [Mapterhorn](https://mapterhorn.com/data-access/).
 [maplibre-contour](https://github.com/onthegomap/maplibre-contour) computes the
@@ -91,7 +91,7 @@ docker compose run --rm datasvc-job python -m datasvc
 The map is at `http://localhost:8080/`, and so is everything else: nginx is the
 only service bound to a host port (`www/nginx.conf`). It serves the built
 previews from `/previews/<preview id>.pmtiles` off the shared volume and proxies
-the rest — the page, the API, the style assets — to garminsvc.
+the rest — the page, the API, the style assets — to mapsvc.
 
 The first run downloads the full extracts of the regions listed in
 `www/datasvc/config.yaml` — a federal district is a few gigabytes, so it takes a
@@ -106,7 +106,7 @@ Settings:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://otm:otm@postgres:5432/otm` | metadata and the garminsvc jobs |
+| `DATABASE_URL` | `postgresql://otm:otm@postgres:5432/otm` | metadata and the mapsvc jobs |
 | `OTM_DATA_DIR` | `/app/data` | the data directory both services share |
 | `OTM_TILEMAKER_THREADS` | cores minus two | tilemaker threads |
 | `OTM_TILEMAKER_BIN` | `tilemaker` on `PATH` | a different tilemaker binary |
@@ -127,7 +127,7 @@ over a large area. tilemaker is not in Homebrew: use the
 takes its binary from) or build from source.
 
 ```bash
-cd www/garminsvc/data
+cd www/mapsvc/data
 wget -P geofabrik-cache https://download.geofabrik.de/russia/north-caucasus-fed-district-latest.osm.pbf
 
 docker run --rm -v "$PWD:/data" -v "$PWD/../../../vector/tilemaker:/style:ro" \
@@ -166,7 +166,7 @@ all of the above in one run, admin points included.
 
 ```bash
 brew install osmium-tool gdal
-cd www/garminsvc && python3 -m venv .venv && . .venv/bin/activate
+cd www/mapsvc && python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-server.txt -r ../datasvc/requirements.txt
 pip install cairosvg pillow  # for typ_to_sprite.py's SVG symbol overrides
 ```

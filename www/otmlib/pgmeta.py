@@ -86,7 +86,7 @@ def list_regions(*, conn=None) -> list[tuple[str, str]]:
     """``(region_id, name)`` of every region currently in the tileset config.
 
     The row set is kept equal to config.yaml by prune_regions(), so this is how
-    a service without that file — garminsvc — learns which regions the
+    a service without that file — mapsvc — learns which regions the
     deployment covers.
     """
     with _conn(conn) as c:
@@ -112,7 +112,7 @@ def coverage_center() -> dict:
     straight through) and empty when nothing has been imported yet. A database
     that is down raises, as everywhere else here; the caller that can carry on
     without an opening position is the one that catches (see
-    ``garminsvc.vectorbasemap._map_center``).
+    ``mapsvc.vectorbasemap._map_center``).
     """
     bounds = coverage_bbox()
     if bounds is None:

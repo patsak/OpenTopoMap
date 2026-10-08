@@ -1,4 +1,4 @@
-"""Shared PostgreSQL connection helpers for datasvc and garminsvc."""
+"""Shared PostgreSQL connection helpers for datasvc and mapsvc."""
 
 from __future__ import annotations
 

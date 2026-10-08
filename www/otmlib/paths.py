@@ -1,6 +1,6 @@
 """Layout of the data directory both services share.
 
-garminsvc, datasvc and the preview worker all read the same tree (one Docker
+mapsvc, datasvc and the preview worker all read the same tree (one Docker
 volume). The names live here so a rename cannot leave one service writing where
 another is not looking.
 """

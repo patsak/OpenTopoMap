@@ -234,6 +234,6 @@ class TestPayload:
         assert data["age_seconds"] >= 0
         # What the picker needs to say how long this render is good for.
         assert 0 < data["expires_in_seconds"] <= previews.TTL_SECONDS
-        # The URL is added by garminsvc, which is the only side that knows
+        # The URL is added by mapsvc, which is the only side that knows
         # where nginx publishes the directory.
         assert "tiles" not in data

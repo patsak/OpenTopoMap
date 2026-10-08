@@ -1,7 +1,7 @@
 // Assembles the MapLibre style of the OpenTopoMap vector map.
 //
 // Its consumer is the bbox picker of the Garmin build service
-// (www/garminsvc/static/app.js), which shows the same map the build will put on
+// (www/mapsvc/static/app.js), which shows the same map the build will put on
 // the device. Sources, contour thresholds and sprite wiring live here rather
 // than in the page, so another consumer gets them for free.
 //

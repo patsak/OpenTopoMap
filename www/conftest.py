@@ -21,7 +21,7 @@ import pytest
 
 WWW = Path(__file__).resolve().parent
 # otmlib/sql holds what both services share (previews, regions, replication).
-SCHEMA_DIRS = (WWW / "otmlib/sql", WWW / "garminsvc/sql")
+SCHEMA_DIRS = (WWW / "otmlib/sql", WWW / "mapsvc/sql")
 
 
 def _with_dbname(url: str, dbname: str) -> str:

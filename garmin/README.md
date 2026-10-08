@@ -2,7 +2,7 @@
 
 This guide describes how to create a custom Garmin map using OpenTopoMap styles.
 
-The interactive bbox build service lives in [`www/garminsvc`](../www/garminsvc).
+The interactive bbox build service lives in [`www/mapsvc`](../www/mapsvc).
 This directory keeps the manual walkthrough, styles, and screenshots.
 
 ## Required tools & OpenTopoMap repository
