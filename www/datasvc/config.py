@@ -1,4 +1,4 @@
-"""Region list and paths for the tile job."""
+"""Region list and paths for the data job."""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from otmlib.geofabrik import GEOFABRIK_BASE_URL, mirror_base_url
 
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parent.parent
-CONFIG_ENV = "OTM_TILESVC_CONFIG"
+CONFIG_ENV = "OTM_DATASVC_CONFIG"
 DEFAULT_CONFIG = ROOT / "config.yaml"
 
 
 @dataclass(frozen=True)
 class Region:
-    """One Geofabrik extract to keep current in the tileset."""
+    """One Geofabrik extract to keep current."""
 
     geofabrik_id: str
 
@@ -32,6 +32,9 @@ class Config:
     # <region>-latest.osm.pbf, <region>-updates/state.txt, …) to read extracts
     # from instead of download.geofabrik.de. None uses the real site.
     geofabrik_mirror: Path | None = None
+    # Merge all the regions into one GOL after each sync (data/gol/regions.gol,
+    # read by www/overpass). Off unless the config asks for it.
+    gol: bool = False
 
     @property
     def geofabrik_cache(self) -> Path:
@@ -46,6 +49,10 @@ class Config:
     @property
     def previews(self) -> Path:
         return paths.previews(self.data_dir)
+
+    @property
+    def gol_path(self) -> Path | None:
+        return paths.regions_gol(self.data_dir) if self.gol else None
 
 
 def config_path() -> Path:
@@ -65,4 +72,8 @@ def load(path: Path | None = None) -> Config:
     data_dir = Path(raw["data_dir"]) if raw.get("data_dir") else paths.resolve_data_dir(fallback)
     geofabrik_mirror = Path(raw["geofabrik_mirror"]) if raw.get("geofabrik_mirror") else None
 
-    return Config(data_dir=data_dir, regions=regions, geofabrik_mirror=geofabrik_mirror)
+    gol = raw.get("gol", False)
+    if not isinstance(gol, bool):
+        raise ValueError(f"{source}: gol must be true or false, not {gol!r}")
+
+    return Config(data_dir=data_dir, regions=regions, geofabrik_mirror=geofabrik_mirror, gol=gol)

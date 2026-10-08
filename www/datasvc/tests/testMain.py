@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import tilesvc.__main__ as cli
+import datasvc.__main__ as cli
 
 
 class MainCase(unittest.TestCase):

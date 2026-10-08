@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The region east of the fixture town, as a second Geofabrik extract would
+  have it: Main Street (way 200) crosses the border, so both extracts carry it
+  and its nodes, in the same version. Beyond the border there is an inn (6)
+  and the road on to it (way 300).
+-->
+<osm version="0.6" generator="hand">
+  <node id="6" version="1" timestamp="2026-08-26T20:22:15Z" lat="50.0200000" lon="10.0800000">
+    <tag k="amenity" v="pub"/>
+    <tag k="name" v="Border Inn"/>
+  </node>
+  <node id="20" version="1" lat="50.0200000" lon="9.9900000"/>
+  <node id="21" version="1" lat="50.0205000" lon="10.0200000"/>
+  <node id="22" version="1" lat="50.0200000" lon="10.0600000"/>
+  <node id="23" version="1" lat="50.0210000" lon="10.0800000"/>
+  <way id="200" version="1">
+    <nd ref="20"/>
+    <nd ref="21"/>
+    <nd ref="22"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Main Street"/>
+  </way>
+  <way id="300" version="1">
+    <nd ref="22"/>
+    <nd ref="23"/>
+    <tag k="highway" v="secondary"/>
+  </way>
+</osm>

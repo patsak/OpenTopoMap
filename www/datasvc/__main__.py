@@ -1,6 +1,6 @@
-"""Run the tile job once: ``python -m tilesvc``.
+"""Run the data job once: ``python -m datasvc``.
 
-Scheduling lives outside (supercronic in the tilesvc-job container), so a manual
+Scheduling lives outside (supercronic in the datasvc-job container), so a manual
 run and a cron run are the same code path.
 """
 
@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tilesvc import config, job
+from datasvc import config, job
 
-log = logging.getLogger("tilesvc.job")
+log = logging.getLogger("datasvc.job")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, help="config.yaml (default: OTM_TILESVC_CONFIG)")
+    parser.add_argument("--config", type=Path, help="config.yaml (default: OTM_DATASVC_CONFIG)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

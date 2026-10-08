@@ -15,8 +15,8 @@ from shapely.geometry import box
 
 from otmlib import previews
 from otmlib.tests.previewaide import makeExpired
-from tilesvc import config as tilesvc_config
-from tilesvc import preview
+from datasvc import config as datasvc_config
+from datasvc import preview
 
 BBOX = (42.0, 43.0, 42.5, 43.4)
 REGION_CONFIG = (
@@ -40,9 +40,9 @@ def _configFacts(derived: Path, styles: Path) -> dict:
 
 @pytest.fixture()
 def cfg(tmp_path, pgDatabase):
-    return tilesvc_config.Config(
+    return datasvc_config.Config(
         data_dir=tmp_path,
-        regions=[tilesvc_config.Region(geofabrik_id="russia/north-caucasus-fed-district")],
+        regions=[datasvc_config.Region(geofabrik_id="russia/north-caucasus-fed-district")],
     )
 
 

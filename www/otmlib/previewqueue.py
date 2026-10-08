@@ -3,7 +3,7 @@
 Its own queue rather than a second task on garminsvc's: that consumer runs one
 worker, and a preview enqueued behind a full .img build would wait out the
 whole build before it started. Here the producer is garminsvc (the HTTP
-handler) and the consumer is the ``tilesvc-preview`` service, which has
+handler) and the consumer is the ``datasvc-preview`` service, which has
 tilemaker in its image — so the task body must not import anything from
 either service at module level.
 """
@@ -28,8 +28,8 @@ huey = PostgresHuey(name=QUEUE_NAME, dsn=pg.database_url(), results=False)
 @huey.task()
 def build_preview(preview_id: str) -> None:
     """Consumer side. Imported lazily: garminsvc enqueues this task but has no
-    tilesvc package in its image, and would fail to import the module."""
-    from tilesvc.preview import build
+    datasvc package in its image, and would fail to import the module."""
+    from datasvc.preview import build
 
     build(preview_id)
 

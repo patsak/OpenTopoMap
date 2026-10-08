@@ -2,7 +2,7 @@
 
 This is the join between the two halves of the pipeline: :mod:`otmlib.geofabrik`
 knows how to fetch and rewrite files but nothing about a database, and
-:mod:`otmlib.pgmeta` is the reverse. Both tilesvc (its configured regions, as
+:mod:`otmlib.pgmeta` is the reverse. Both datasvc (its configured regions, as
 tilemaker input) and garminsvc (the leaf regions a bbox needs) sync through
 here, so a region shared by the two is downloaded, updated and tracked once.
 """
@@ -136,7 +136,7 @@ def configured_regions(
 ) -> list[Region]:
     """The regions the deployment covers, as Geofabrik regions with geometry.
 
-    ``otm.regions`` is kept equal to tilesvc's config.yaml by prune_regions(),
+    ``otm.regions`` is kept equal to datasvc's config.yaml by prune_regions(),
     so this reads that list back and re-attaches the polygons from the cached
     index — which is how garminsvc, which never sees config.yaml, can tell
     whether a bbox is inside the covered area.
@@ -194,7 +194,7 @@ def bbox_coverage_gap(
 
     regions = configured_regions(cache_dir, base_url)
     if not regions:
-        return "no regions are configured yet — run tilesvc-job"
+        return "no regions are configured yet — run datasvc-job"
     area = box(min(west, east), min(south, north), max(west, east), max(south, north))
     covered = unary_union([region.geometry for region in regions])
     if covered.contains(area):

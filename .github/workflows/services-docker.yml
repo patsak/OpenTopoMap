@@ -67,7 +67,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest gdal=="$(gdal-config --version)"
           python -m pip install -r www/garminsvc/requirements-server.txt
-          python -m pip install -r www/tilesvc/requirements.txt
+          python -m pip install -r www/datasvc/requirements.txt
 
       - name: Run tests
         working-directory: www
@@ -88,8 +88,8 @@ jobs:
         include:
           - service: garminsvc
             dockerfile: www/garminsvc/Dockerfile
-          - service: tilesvc
-            dockerfile: www/tilesvc/Dockerfile
+          - service: datasvc
+            dockerfile: www/datasvc/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

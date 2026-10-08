@@ -1,6 +1,6 @@
 """Invoke tilemaker, and find the cartography it runs on.
 
-The one caller today is the bbox preview (:mod:`tilesvc.preview`), but neither
+The one caller today is the bbox preview (:mod:`datasvc.preview`), but neither
 the command line nor the lookup of the style tree belongs to it: both are about
 tilemaker itself, and both are wanted by anything that renders these tiles.
 Policy — which config, which zooms, where the output lands — stays with the
@@ -48,7 +48,7 @@ def tilemaker_bin() -> str:
     found = shutil.which(DEFAULT_BIN)
     if not found:
         raise RuntimeError(
-            "tilemaker not found; the tilesvc image copies it from "
+            "tilemaker not found; the datasvc image copies it from "
             f"ghcr.io/systemed/tilemaker, or set {BIN_ENV}"
         )
     return found

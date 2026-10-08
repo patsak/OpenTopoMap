@@ -5,3 +5,6 @@
 **/.venv/
 **/.venv-*/
 .*-work/
+
+# s2veg feature stacks and trained models - big, local, reproducible
+tools/work/

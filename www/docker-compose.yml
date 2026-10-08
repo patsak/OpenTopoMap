@@ -1,4 +1,4 @@
-# The whole OpenTopoMap stack: the Garmin build service, the tile job, the
+# The whole OpenTopoMap stack: the Garmin build service, the data job, the
 # preview worker, and the nginx in front of all of them - the one entry point,
 # serving the built previews itself and proxying the rest.
 #
@@ -7,9 +7,9 @@
 #
 # Prebuilt image from master: ghcr.io/patsak/opentopomap-garminsvc:latest
 #
-# tilesvc-job keeps the region PBFs current from Geofabrik's diffs. Everything
+# datasvc-job keeps the region PBFs current from Geofabrik's diffs. Everything
 # downstream cuts its own bbox out of those same files with osmium: garminsvc
-# for an .img build, tilesvc-preview for a map preview. Postgres holds metadata
+# for an .img build, datasvc-preview for a map preview. Postgres holds metadata
 # only - the last applied osc.gz, which regions are covered, the previews -
 # plus the garminsvc job queue.
 #
@@ -107,16 +107,16 @@ services:
       retries: 5
       start_period: 30s
 
-  # On a schedule: Geofabrik → osmium apply-changes → tilemaker → mbtiles.
-  # To run it by hand:
-  #   docker compose run --rm tilesvc-job python -m tilesvc
-  tilesvc-job:
+  # On a schedule: Geofabrik → osmium apply-changes, then the GOL overpass
+  # reads (osmium merge → gol build, data/gol/). To run it by hand:
+  #   docker compose run --rm datasvc-job python -m datasvc
+  datasvc-job:
     build:
       context: ..
-      dockerfile: www/tilesvc/Dockerfile
-    image: ghcr.io/patsak/opentopomap-tilesvc:latest
+      dockerfile: www/datasvc/Dockerfile
+    image: ghcr.io/patsak/opentopomap-datasvc:latest
     working_dir: /app
-    command: ["supercronic", "/app/tilesvc/crontab"]
+    command: ["supercronic", "/app/datasvc/crontab"]
     # tilemaker is the memory-hungry step: it holds the tile it is writing plus
     # index windows over the node/way store, and osmium merge/apply-changes
     # stream whole federal-district PBFs alongside. Uncapped, a bad run exhausts
@@ -124,16 +124,23 @@ services:
     # own OOM killer ends the job and the host survives. --store keeps the bulk
     # of tilemaker's working set on disk (see tilemaker.py), which is what makes
     # a few GB enough here at all.
-    mem_limit: ${OTM_TILESVC_MEM:-6g}
+    mem_limit: ${OTM_DATASVC_MEM:-6g}
     environment:
       OTM_DATA_DIR: /app/data
       DATABASE_URL: postgresql://otm:otm@postgres:5432/otm
       OTM_TILEMAKER_THREADS: ${OTM_TILEMAKER_THREADS:-2}
+      # Where the GOL is merged and built before it is copied into data/gol/
+      # (otmlib.gol): a volume of the Docker VM's own, because gol cannot
+      # build on the data dir when that is a macOS directory Colima mounts
+      # over sshfs. Needs about three times the configured PBFs while it
+      # builds (the merged PBF and the GOL), ~12 GB for the stock config.
+      OTM_GOL_WORK_DIR: /work
     volumes:
       - ./garminsvc/data:/app/data
       - ../vector/tilemaker:/app/vector/tilemaker:ro
-      - ./tilesvc:/app/tilesvc:ro
+      - ./datasvc:/app/datasvc:ro
       - ./otmlib:/app/otmlib:ro
+      - gol_work:/work
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,15 +149,15 @@ services:
 
   # Area previews, on a button press: their own queue (otmlib.previewqueue), so
   # a preview never waits out a multi-hour .img build in the garminsvc queue.
-  # Same image as tilesvc-job - tilemaker and osmium are already in it.
-  #   docker compose logs -f tilesvc-preview
-  tilesvc-preview:
+  # Same image as datasvc-job - tilemaker and osmium are already in it.
+  #   docker compose logs -f datasvc-preview
+  datasvc-preview:
     build:
       context: ..
-      dockerfile: www/tilesvc/Dockerfile
-    image: ghcr.io/patsak/opentopomap-tilesvc:latest
+      dockerfile: www/datasvc/Dockerfile
+    image: ghcr.io/patsak/opentopomap-datasvc:latest
     working_dir: /app
-    command: ["python", "-m", "tilesvc.preview"]
+    command: ["python", "-m", "datasvc.preview"]
     # One bbox at a time, and a bbox is a fraction of a region - so a fraction
     # of what the nightly full build needs.
     mem_limit: ${OTM_PREVIEW_MEM:-4g}
@@ -161,12 +168,43 @@ services:
     volumes:
       - ./garminsvc/data:/app/data
       - ../vector/tilemaker:/app/vector/tilemaker:ro
-      - ./tilesvc:/app/tilesvc:ro
+      - ./datasvc:/app/datasvc:ro
       - ./otmlib:/app/otmlib:ro
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+
+  # An Overpass API (POST /api/interpreter) answering from one GeoDesk GOL
+  # merged out of every region datasvc keeps current, data/gol/regions.gol.
+  # datasvc-job builds it right after its sync
+  # (datasvc.job.build_gol); www/overpass/README.md. Until it exists the
+  # service answers 503, and a rebuilt one is picked up on the next query, no
+  # restart.
+  overpass:
+    build:
+      context: ..
+      dockerfile: www/overpass/Dockerfile
+    image: ghcr.io/patsak/opentopomap-overpass:latest
+    # geodesk's wheels exist for x86_64 only (see the Dockerfile).
+    platform: linux/amd64
+    expose:
+      - "8080"
+    environment:
+      OTM_DATA_DIR: /app/data
+      # Built by datasvc-job when www/datasvc/config.yaml says gol: true.
+      OTM_OVERPASS_GOL: /app/data/gol/regions.gol
+      OTM_OVERPASS_WORKERS: ${OTM_OVERPASS_WORKERS:-2}
+    volumes:
+      # Read-only: datasvc-job is what writes data/gol/.
+      - ./garminsvc/data:/app/data:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # The front door, and the only service bound to a host port: the page, the
   # API and the built previews on one origin (see nginx.conf). Requests are
@@ -186,6 +224,8 @@ services:
       # healthy - a 502 while gunicorn boots is better than a closed port.
       garminsvc:
         condition: service_started
+      overpass:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -195,3 +235,4 @@ services:
 
 volumes:
   postgres_data:
+  gol_work:

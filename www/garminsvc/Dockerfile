@@ -41,7 +41,7 @@ RUN python3 -m venv --system-site-packages /opt/otm-venv \
     && /opt/otm-venv/bin/pip install --no-cache-dir -r /app/requirements-server.txt
 
 COPY www/garminsvc/ /app/garminsvc/
-# Shared with tilesvc; a plain package next to garminsvc, no install step.
+# Shared with datasvc; a plain package next to garminsvc, no install step.
 COPY www/otmlib /app/otmlib
 # Cartography stays under garmin/; bake the bits the service needs into the image.
 COPY garmin/style /garmin/style

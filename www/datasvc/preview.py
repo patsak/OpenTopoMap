@@ -1,12 +1,12 @@
 """Build one bbox preview: the drawn rectangle as a ``.pmtiles`` file.
 
-Runs in the tilesvc image, because that is where tilemaker and osmium live, and
+Runs in the datasvc image, because that is where tilemaker and osmium live, and
 takes its work from the preview queue (:mod:`otmlib.previewqueue`) rather than
 from a schedule. The input is the same kept-current Geofabrik extract the
 nightly tileset and the Garmin builds cut from, so a preview never downloads
 anything the deployment was not already tracking.
 
-    python -m tilesvc.preview      # the consumer, one worker
+    python -m datasvc.preview      # the consumer, one worker
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from otmlib import tilemaker as runner
 from otmlib.geofabrik import extract_bbox
 from otmlib.proc import check_cancelled
 
-from tilesvc import config as tilesvc_config
-from tilesvc.config import Config
+from datasvc import config as datasvc_config
+from datasvc.config import Config
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def _sync_inputs(cfg: Config, preview: previews.Preview, log_fn) -> list[Path]:
 
 def build(preview_id: str, cfg: Config | None = None) -> None:
     """Take one queued preview all the way to a published .pmtiles."""
-    cfg = cfg or tilesvc_config.load()
+    cfg = cfg or datasvc_config.load()
     preview = previews.get(preview_id)
     if preview is None:
         log.warning("Preview %s is gone, nothing to build", preview_id)
@@ -168,7 +168,7 @@ def recover(cfg: Config | None = None) -> None:
     Expiry comes first so a restart does not spend a tilemaker run rebuilding
     previews that are already past their TTL.
     """
-    cfg = cfg or tilesvc_config.load()
+    cfg = cfg or datasvc_config.load()
     previews.expire(previews_dir(cfg))
     moved = previews.requeue_running()
     if moved:

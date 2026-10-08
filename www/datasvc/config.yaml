@@ -1,17 +1,29 @@
-# Regions the tile job keeps current. Everything downstream follows from this
+# Regions the data job keeps current. Everything downstream follows from this
 # list: these are the PBFs a Garmin build and a map preview are cut out of, and
 # a preview is offered only for the area they cover.
 #
 # Ids are Geofabrik index ids (https://download.geofabrik.de/index-v1.json), the
 # path part of the download URL. Keep them as small as the coverage allows — a
 # region is downloaded in full and then kept current diff by diff.
+#
+# All of Russia, district by district. russia/kaliningrad is not listed: the
+# northwestern district's extract already contains it whole, so it would be a
+# second download of the same data.
 regions:
+  - russia/central-fed-district
   - russia/northwestern-fed-district
-  - russia/north-caucasus-fed-district
   - russia/south-fed-district
-  - russia/far-eastern-fed-district
+  - russia/north-caucasus-fed-district
+  - russia/volga-fed-district
+  - russia/ural-fed-district
   - russia/siberian-fed-district
+  - russia/far-eastern-fed-district
+  - russia/crimean-fed-district
 
+# Build the GOL www/overpass answers from: every region above, whichever they
+# are, merged into data/gol/regions.gol and rebuilt after a sync whenever the
+# extracts changed (datasvc.job.build_gol). false skips the step.
+gol: true
 
 # Shared with garminsvc. Empty means OTM_DATA_DIR, then www/garminsvc/data.
 data_dir: ""

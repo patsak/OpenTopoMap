@@ -5,12 +5,12 @@ uploaded OSM/PBF file.
 
 The mkgmap styles and the `*_options` files live in [`garmin/`](../../garmin) —
 the service only reads them (`OTM_GARMIN_DIR`, `../../garmin` from the
-repository root by default). What it shares with [`tilesvc`](../tilesvc)
+repository root by default). What it shares with [`datasvc`](../datasvc)
 (Geofabrik, DEM, glaciers, contour post-processing) lives in
 [`otmlib`](../otmlib): a plain package, `import otmlib`, no pip step.
 
 The whole stack is easiest to bring up with compose — one file in
-[`www/`](..) covers every service, and it also brings Postgres, tilesvc, the
+[`www/`](..) covers every service, and it also brings Postgres, datasvc, the
 preview worker and the nginx in front of all of it (`www/nginx.conf`: the
 previews off the shared volume, everything else proxied here):
 
@@ -38,7 +38,7 @@ python -m garminsvc.server
 ```
 
 Everything runs from `www/`: the service is the package `garminsvc` there, next
-to `otmlib` and `tilesvc` — the same layout the image has under `/app`.
+to `otmlib` and `datasvc` — the same layout the image has under `/app`.
 
 The schema (`sql/001_schema.sql`, schema `otm_garmin`) is applied at startup;
 huey creates its own `huey_*` tables.
@@ -98,7 +98,7 @@ How it works:
 ```
 POST /preview {bbox} ──► otm.map_previews (queued) ──► huey queue "otm-preview"
                                                               │
-                          tilesvc-preview: sync the regions ──► osmium extract ──►
+                          datasvc-preview: sync the regions ──► osmium extract ──►
                           tilemaker (zooms 0–14) ──► data/previews/<id>.pmtiles
                                                               │
    GET /preview/<id> ◄── status, while the built file is read by the browser
@@ -108,9 +108,9 @@ POST /preview {bbox} ──► otm.map_previews (queued) ──► huey queue "o
 
 The limits are deliberate:
 
-* **Only the regions in `www/tilesvc/config.yaml`.** A bbox outside them is
+* **Only the regions in `www/datasvc/config.yaml`.** A bbox outside them is
   rejected, with the covered regions named: a preview is cut from the same
-  extracts `tilesvc-job` keeps current, rather than downloading a fresh region
+  extracts `datasvc-job` keeps current, rather than downloading a fresh region
   on a button press. The map draws the outline of every downloaded region
   (`GET /regions`, the Geofabrik polygons `POST /preview` measures the bbox
   against), so where a preview is possible can be seen before the button is
@@ -127,8 +127,8 @@ by the OSM extract a preview is cut from, and the stack no longer builds an
 ocean tileset. On a mountain bbox that goes unnoticed; on a coastal one the
 water takes the background colour.
 
-If a preview sits in “queued” for a long time, `tilesvc-preview` is not running
-(`docker compose up -d tilesvc-preview`) — the UI says so.
+If a preview sits in “queued” for a long time, `datasvc-preview` is not running
+(`docker compose up -d datasvc-preview`) — the UI says so.
 
 ## Where the data comes from
 
@@ -140,7 +140,7 @@ area — any bbox in the world can be built, but the first request in a new regi
 pays for downloading the extract.
 
 The cache and the replication tracking are shared with
-[`tilesvc`](../tilesvc): a region listed in `www/tilesvc/config.yaml` is already
+[`datasvc`](../datasvc): a region listed in `www/datasvc/config.yaml` is already
 current, and a build over it starts immediately.
 
 Contours and crevasses on the device are built from the glacier subset of the
@@ -156,7 +156,7 @@ come from nginx, which fronts both. For the cartography itself see
 ## Tests
 
 ```bash
-cd www && pytest      # garminsvc, tilesvc and otmlib in one go
+cd www && pytest      # garminsvc, datasvc and otmlib in one go
 ```
 
 `www/pytest.ini` puts `www` on `sys.path` — the same layout Docker gets under

@@ -1,0 +1,5 @@
+flask>=3.0
+gunicorn>=22.0
+# 2.3.x is what overpass.evaluator is written against, segfault on an
+# abandoned query iterator included (see its docstring). geodesk brings shapely.
+geodesk>=2.3,<2.4

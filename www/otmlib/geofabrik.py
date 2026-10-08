@@ -163,7 +163,7 @@ def find_leaf_regions(
     """The smallest set of Geofabrik extracts that covers *bbox*.
 
     Used by garminsvc, whose bboxes are arbitrary and worldwide — unlike
-    tilesvc, which works from an explicit region list in config.yaml.
+    datasvc, which works from an explicit region list in config.yaml.
     """
     if east < west:
         west, east = east, west

@@ -89,8 +89,8 @@ class MapBuilder:
     def _prepare_geofabrik(self, bbox: BBox) -> None:
         """Download (and bring current) the smallest extracts covering *bbox*.
 
-        The cache is shared with tilesvc, and so is the replication tracking in
-        ``otm.replication_state`` — a region tilesvc already keeps up to date
+        The cache is shared with datasvc, and so is the replication tracking in
+        ``otm.replication_state`` — a region datasvc already keeps up to date
         needs nothing here beyond a state.txt check.
         """
         if self._geofabrik_pbfs:

@@ -276,7 +276,7 @@ class TestCoverageGap(CoverageCase):
 
     def testNoConfiguredRegionsSaysSo(self):
         gap = regionsync.bbox_coverage_gap(44.0, 39.0, 45.0, 40.0, self.tmp)
-        self.assertIn("tilesvc-job", gap)
+        self.assertIn("datasvc-job", gap)
 
 
 if __name__ == "__main__":

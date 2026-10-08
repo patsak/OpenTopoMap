@@ -7,7 +7,7 @@ from unittest import mock
 
 from otmlib import paths
 
-from tilesvc import config
+from datasvc import config
 
 
 class ConfigCase(unittest.TestCase):
@@ -30,6 +30,24 @@ class TestLoad(ConfigCase):
             [r.geofabrik_id for r in cfg.regions],
             ["russia/north-caucasus-fed-district", "georgia"],
         )
+
+    def testGolIsOneFileForWhateverRegions(self):
+        cfg = config.load(self.write(f"regions: [georgia, armenia]\ndata_dir: {self.tmp}\ngol: true\n"))
+        self.assertTrue(cfg.gol)
+        self.assertEqual(cfg.gol_path, self.tmp / "gol" / "regions.gol")
+
+    def testNoGolMeansNoStep(self):
+        for body in ("regions: [georgia]\n", "regions: [georgia]\ngol: false\n"):
+            with self.subTest(body=body):
+                cfg = config.load(self.write(body))
+                self.assertFalse(cfg.gol)
+                self.assertIsNone(cfg.gol_path)
+
+    def testGolMustBeAFlag(self):
+        # A name in place of the flag is an error, not a truthy value: the
+        # file is always regions.gol, whatever the regions are.
+        with self.assertRaises(ValueError):
+            config.load(self.write("regions: [georgia]\ngol: russia\n"))
 
     def testRejectsAnEmptyRegionList(self):
         with self.assertRaises(ValueError):

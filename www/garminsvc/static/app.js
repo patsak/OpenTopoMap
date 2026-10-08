@@ -771,7 +771,7 @@
           return true;
         }
         // A preview sitting in "queued" for a minute means nothing is consuming the
-        // queue - almost always the tilesvc-preview container is not running.
+        // queue - almost always the datasvc-preview container is not running.
         const stalled =
           data.status === "queued" && (data.age_seconds || 0) > 60
             ? " — is the preview worker running?"

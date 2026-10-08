@@ -5,14 +5,14 @@ Topographic map from OpenStreetMap and DEM data: live vector tiles and Garmin `.
 
 ### Vector tiles (tilemaker, on demand)
 
-Geofabrik extracts are kept current in place (full PBF once, then `.osc.gz` diffs). Tiles are rendered from them by tilemaker (`vector/tilemaker/process-otm.lua`) per drawn bbox, on demand, into a `.pmtiles` file nginx serves. Postgres holds only the pipeline's metadata. See [www/README.md](www/README.md) and [www/tilesvc](www/tilesvc).
+Geofabrik extracts are kept current in place (full PBF once, then `.osc.gz` diffs). Tiles are rendered from them by tilemaker (`vector/tilemaker/process-otm.lua`) per drawn bbox, on demand, into a `.pmtiles` file nginx serves. Postgres holds only the pipeline's metadata. See [www/README.md](www/README.md) and [www/datasvc](www/datasvc).
 
 Local stack:
 
 ```bash
 cd www
 docker compose up -d --build
-docker compose run --rm tilesvc-job python -m tilesvc
+docker compose run --rm datasvc-job python -m datasvc
 ```
 
 Everything is on one origin, behind the stack's nginx: map UI at `http://localhost:8080/`, built previews under `http://localhost:8080/previews/<id>.pmtiles`.

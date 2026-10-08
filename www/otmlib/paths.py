@@ -1,6 +1,6 @@
 """Layout of the data directory both services share.
 
-garminsvc, tilesvc and the preview worker all read the same tree (one Docker
+garminsvc, datasvc and the preview worker all read the same tree (one Docker
 volume). The names live here so a rename cannot leave one service writing where
 another is not looking.
 """
@@ -16,6 +16,7 @@ GEOFABRIK_CACHE_NAME = "geofabrik-cache"
 DEM_CACHE_NAME = "dem-cache"
 
 PREVIEWS_NAME = "previews"
+GOL_DIR_NAME = "gol"
 
 
 def resolve_data_dir(fallback: Path) -> Path:
@@ -37,3 +38,12 @@ def previews(data_dir: Path) -> Path:
     directory as static files; the browser reads them with range requests."""
     return data_dir / PREVIEWS_NAME
 
+
+def gol(data_dir: Path) -> Path:
+    """GeoDesk GOLs (otmlib.gol): written by datasvc, read by overpass."""
+    return data_dir / GOL_DIR_NAME
+
+
+def regions_gol(data_dir: Path) -> Path:
+    """The one GOL merged out of every region datasvc syncs, whatever they are."""
+    return gol(data_dir) / "regions.gol"

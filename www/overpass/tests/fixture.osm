@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A town small enough to know every answer by heart.
+
+  Testtown (relation 1000) is the square 50.00-50.04 N, 10.00-10.04 E, drawn
+  by the untagged way 100. Inside it: the pub (1), the bar (2), the bakery (5)
+  and the Hall (way 101). Outside: the cafe (3) and the peak (4). Main Street
+  (way 200) runs west to east along 50.02 N, through the town and out of it.
+  The Trail (relation 2000) holds Main Street, the pub as a stop and, as a
+  sub-relation, Testtown itself. The pub is the newest edit in the town, the
+  only object with a timestamp (otmlib.gol dates a GOL by it).
+-->
+<osm version="0.6" generator="hand">
+  <node id="1" version="1" timestamp="2026-09-04T20:21:21Z" lat="50.0100000" lon="10.0100000">
+    <tag k="amenity" v="pub"/>
+    <tag k="name" v="The Anchor"/>
+  </node>
+  <node id="2" version="1" lat="50.0200000" lon="10.0200000">
+    <tag k="amenity" v="bar"/>
+    <tag k="name" v="Bar Two"/>
+  </node>
+  <node id="3" version="1" lat="50.0500000" lon="10.0500000">
+    <tag k="amenity" v="cafe"/>
+    <tag k="name" v="Café"/>
+  </node>
+  <node id="4" version="1" lat="50.0900000" lon="10.0900000">
+    <tag k="natural" v="peak"/>
+    <tag k="ele" v="1200"/>
+    <tag k="name" v="Testberg"/>
+  </node>
+  <node id="5" version="1" lat="50.0300000" lon="10.0100000">
+    <tag k="shop" v="bakery"/>
+    <tag k="name" v="Bäckerei"/>
+    <tag k="addr:housenumber" v="12"/>
+  </node>
+  <node id="10" version="1" lat="50.0000000" lon="10.0000000"/>
+  <node id="11" version="1" lat="50.0000000" lon="10.0400000"/>
+  <node id="12" version="1" lat="50.0400000" lon="10.0400000"/>
+  <node id="13" version="1" lat="50.0400000" lon="10.0000000"/>
+  <node id="20" version="1" lat="50.0200000" lon="9.9900000"/>
+  <node id="21" version="1" lat="50.0205000" lon="10.0200000"/>
+  <node id="22" version="1" lat="50.0200000" lon="10.0600000"/>
+  <node id="30" version="1" lat="50.0100000" lon="10.0300000"/>
+  <node id="31" version="1" lat="50.0100000" lon="10.0320000"/>
+  <node id="32" version="1" lat="50.0120000" lon="10.0320000"/>
+  <node id="33" version="1" lat="50.0120000" lon="10.0300000"/>
+  <way id="100" version="1">
+    <nd ref="10"/>
+    <nd ref="11"/>
+    <nd ref="12"/>
+    <nd ref="13"/>
+    <nd ref="10"/>
+  </way>
+  <way id="101" version="1">
+    <nd ref="30"/>
+    <nd ref="31"/>
+    <nd ref="32"/>
+    <nd ref="33"/>
+    <nd ref="30"/>
+    <tag k="building" v="yes"/>
+    <tag k="name" v="Hall"/>
+  </way>
+  <way id="200" version="1">
+    <nd ref="20"/>
+    <nd ref="21"/>
+    <nd ref="22"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Main Street"/>
+  </way>
+  <relation id="1000" version="1">
+    <member type="way" ref="100" role="outer"/>
+    <tag k="type" v="boundary"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="8"/>
+    <tag k="name" v="Testtown"/>
+  </relation>
+  <relation id="2000" version="1">
+    <member type="way" ref="200" role=""/>
+    <member type="node" ref="1" role="stop"/>
+    <member type="relation" ref="1000" role=""/>
+    <tag k="type" v="route"/>
+    <tag k="route" v="hiking"/>
+    <tag k="name" v="Trail"/>
+  </relation>
+</osm>

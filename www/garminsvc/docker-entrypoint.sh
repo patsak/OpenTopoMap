@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# Same tree tilesvc fills; OTM_DATA_DIR points both services at the shared volume.
+# Same tree datasvc fills; OTM_DATA_DIR points both services at the shared volume.
 data_dir="${OTM_DATA_DIR:-/app/data}"
 mkdir -p "$data_dir/sea" "$data_dir/bounds" "$data_dir/jobs" \
   "$data_dir/geofabrik-cache" "$data_dir/dem-cache"

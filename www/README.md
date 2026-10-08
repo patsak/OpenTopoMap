@@ -18,12 +18,13 @@ plus the TYP files `garmin/style/typ/opentopomap-hike.txt` and
 | `tools/validate_style.py` | checks the style against the config's layers, the sprite and the TYP palette |
 | `maplibregljs/otm_layers.json` | the style itself |
 | `maplibregljs/otm_style.js` | assembles the style: sources, Mapterhorn, contours, sprite |
-| `www/tilesvc/` | the job: Geofabrik → PBF, kept current from the diffs |
-| `www/tilesvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
+| `www/datasvc/` | the job: Geofabrik → PBF, kept current from the diffs, then the GOL `www/overpass` reads |
+| `www/datasvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
 | `www/otmlib/sql/` | the metadata schema in Postgres (osc sequences, regions, previews) |
 | `www/otmlib/` | Geofabrik (downloads, osc, bbox cutting), DEM, metadata |
 | `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to garminsvc |
 | `www/garminsvc/vectorbasemap.py` | the same cartography inside the Garmin build service |
+| `www/overpass/` | an Overpass API (`/api/interpreter`) over a GeoDesk GOL of one region — prototype, see its README |
 
 ## How it works
 
@@ -70,8 +71,8 @@ tile passes through it, which is why there is no PostGIS.
 
 The Garmin build cuts its bbox out of the same PBFs (`osmium extract -s smart`,
 where `smart` keeps multipolygons whole across the bbox edge) — see
-`otmlib.geofabrik`. The `data/geofabrik-cache` directory is shared with tilesvc,
-and so is the sequence tracking: a region tilesvc already keeps current is only
+`otmlib.geofabrik`. The `data/geofabrik-cache` directory is shared with datasvc,
+and so is the sequence tracking: a region datasvc already keeps current is only
 checked by garminsvc.
 
 Relief on the web comes from [Mapterhorn](https://mapterhorn.com/data-access/).
@@ -84,7 +85,7 @@ isolines in the browser; below the contour floor the relief is carried by
 ```bash
 cd www
 docker compose up -d --build
-docker compose run --rm tilesvc-job python -m tilesvc
+docker compose run --rm datasvc-job python -m datasvc
 ```
 
 The map is at `http://localhost:8080/`, and so is everything else: nginx is the
@@ -93,7 +94,7 @@ previews from `/previews/<preview id>.pmtiles` off the shared volume and proxies
 the rest — the page, the API, the style assets — to garminsvc.
 
 The first run downloads the full extracts of the regions listed in
-`www/tilesvc/config.yaml` — a federal district is a few gigabytes, so it takes a
+`www/datasvc/config.yaml` — a federal district is a few gigabytes, so it takes a
 while, but only once. Later runs apply the new `.osc.gz` diffs and nothing else.
 
 Until a region has been downloaded, previews over it are refused: there is
@@ -109,7 +110,7 @@ Settings:
 | `OTM_DATA_DIR` | `/app/data` | the data directory both services share |
 | `OTM_TILEMAKER_THREADS` | cores minus two | tilemaker threads |
 | `OTM_TILEMAKER_BIN` | `tilemaker` on `PATH` | a different tilemaker binary |
-| `OTM_TILESVC_MEM` | `6g` | memory limit of the job container |
+| `OTM_DATASVC_MEM` | `6g` | memory limit of the job container |
 | `OTM_PORT` | `8080` | host port of the nginx in front of the whole stack |
 | `OTM_PREVIEW_PUBLIC_URL` | `/previews` | where the browser reads previews from; an absolute URL only if they are published under a host of their own |
 | `OTM_PREVIEW_MEM` | `4g` | memory limit of the preview worker |
@@ -122,7 +123,7 @@ is all it does.
 Nothing in the stack does this any more — previews are cut per bbox — but a
 whole-region tileset is still the quickest way to look at a cartography change
 over a large area. tilemaker is not in Homebrew: use the
-`ghcr.io/systemed/tilemaker:master` image (the same one `www/tilesvc/Dockerfile`
+`ghcr.io/systemed/tilemaker:master` image (the same one `www/datasvc/Dockerfile`
 takes its binary from) or build from source.
 
 ```bash
@@ -166,7 +167,7 @@ all of the above in one run, admin points included.
 ```bash
 brew install osmium-tool gdal
 cd www/garminsvc && python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-server.txt -r ../tilesvc/requirements.txt
+pip install -r requirements-server.txt -r ../datasvc/requirements.txt
 pip install cairosvg pillow  # for typ_to_sprite.py's SVG symbol overrides
 ```
 

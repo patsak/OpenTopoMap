@@ -29,7 +29,7 @@ STYLE_DIR = GARMIN_DIR / "style"
 OPTIONS_MAIN = GARMIN_DIR / "opentopomap_hike_options"
 OPTIONS_CONTOURS = GARMIN_DIR / "contours_hike_options"
 
-# Shared with tilesvc: same tree, same layout (see otmlib.paths).
+# Shared with datasvc: same tree, same layout (see otmlib.paths).
 DATA_DIR = paths.resolve_data_dir(ROOT / "data")
 # mkgmap and splitter (see garminsvc.artifacts). Downloaded content, so it lives
 # under data/ and not in the source tree: git and Docker already ignore that
@@ -39,12 +39,12 @@ TOOLS_DIR = Path(os.environ.get("OTM_TOOLS_DIR") or DATA_DIR / "tools")
 SEA_DIR = DATA_DIR / "sea"
 BOUNDS_DIR = DATA_DIR / "bounds"
 HGT_CACHE = paths.hgt_cache(DATA_DIR)
-# Geofabrik extracts, shared with tilesvc: the same file is both a bbox source
+# Geofabrik extracts, shared with datasvc: the same file is both a bbox source
 # here and tilemaker's input there, kept current from one tracked sequence.
 GEOFABRIK_CACHE = paths.geofabrik_cache(DATA_DIR)
 JOBS_DIR = DATA_DIR / "jobs"
 # Built bbox previews (<id>.pmtiles). Written by the preview worker in the
-# tilesvc image, published as static files by nginx, and read here only to
+# datasvc image, published as static files by nginx, and read here only to
 # check that a finished preview is still on disk.
 PREVIEWS_DIR = paths.previews(DATA_DIR)
 # MapLibre style of the vector map shown as a basemap in the bbox picker. In a git

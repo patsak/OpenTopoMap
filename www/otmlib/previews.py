@@ -3,7 +3,7 @@
 A preview is one bbox rendered with the same cartography the web map uses, as
 a single ``.pmtiles`` file nginx serves. This module owns the row; the queue is
 huey's (:mod:`otmlib.previewqueue`) and the building is
-:mod:`tilesvc.preview`. Both services import this — garminsvc to create rows
+:mod:`datasvc.preview`. Both services import this — garminsvc to create rows
 and report them, the worker to advance them — so nothing here may import
 either.
 """
