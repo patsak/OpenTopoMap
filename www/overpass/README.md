@@ -88,9 +88,12 @@ The GOL is merged and built in `OTM_GOL_WORK_DIR` (`/work`, the `gol_work`
 volume, in datasvc-job) and copied into `data/gol/` when done. On macOS the
 data dir is a host directory Colima mounts into its VM over sshfs, and gol
 cannot build there - it stops with "Operation not supported"; the volume lives
-on the VM's own disk. It needs about three times the size of the configured
-PBFs while building (the merged PBF and the GOL; ~12 GB for the stock config),
-freed when the build ends.
+on the VM's own disk. It needs about seven times the size of the configured
+PBFs while building - gol's sort files are far bigger than the GOL it ends
+with; 28 GB at the peak for the stock config's 4.2 GB - and it is freed when
+the build ends. `otmlib.gol` checks for 8x before it starts: a full disk does
+not reach gol as an error but as SIGBUS (it maps its files into memory), and
+that is now reported as a full disk instead of a bare signal.
 
 The `overpass` image itself is `linux/amd64`: geodesk's Python wheels exist
 for x86_64 alone. On Apple Silicon it runs under qemu, which is fine for
@@ -122,7 +125,7 @@ reading a GOL.
   and a limit;
 * `if:` expressions: `t[]`, `is_tag`, `id`, `type`, `count_tags`,
   `count_members`, `is_closed`, `length`, `lat`, `lon`, `number`,
-  `is_number`, `suffix`, `abs`, `min`, `max`, the usual operators and `?:`.
+  `is_number`, `suffix`, `abs`, `min`, `max`, the aggregate `count(nodes|ways|relations|areas|nwr|…)` over the set `_`, the usual operators and `?:`.
 
 Refused as a `static error` rather than answered wrongly: history and metadata
 (`[date:]`, `[diff:]`, `[adiff:]`, `newer`, `changed`, `user`, `uid`), and the

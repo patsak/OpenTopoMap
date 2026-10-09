@@ -1,6 +1,7 @@
 """Queries over the fixture town (tests/fixture.osm), answers worked out by hand."""
 
 import unittest
+from unittest import mock
 
 import pytest
 
@@ -53,8 +54,22 @@ class TestTags(EvaluatorCase):
         self.assertEqual(self.found('node[name][amenity!~"^p"];'), ["node/2", "node/3", "node/4", "node/5"])
 
     def testAbsenceAndKeyRegex(self):
-        self.assertEqual(self.found("node[!amenity][shop];"), ["node/5"])
+        self.assertEqual(self.found("node[!amenity][shop];"), ["node/5", "node/7"])
         self.assertEqual(self.found('node[~"^addr:"~"."];'), ["node/5"])
+
+    def testKeyPresentIncludesNo(self):
+        # GOQL's [shop] leaves out shop=no; Overpass's does not.
+        self.assertEqual(self.found("node[shop];"), ["node/5", "node/7"])
+        self.assertEqual(self.found("node[shop=no];"), ["node/7"])
+        self.assertEqual(self.found('node[shop~"o"];'), ["node/7"])
+
+    def testNegationsOnRareKeysKeepEverythingElse(self):
+        # GeoDesk 2.3 drops features from [!k] next to another clause when k
+        # is rare; here only node 7 has opening_hours:covid19.
+        self.assertEqual(
+            self.found('node[name][!opening_hours][!"opening_hours:covid19"];'),
+            ["node/1", "node/2", "node/3", "node/4", "node/5"],
+        )
 
     def testStarIsNotAGlob(self):
         # GOQL would read "pu*" as a glob and find the pub.
@@ -103,6 +118,18 @@ class TestSpatial(EvaluatorCase):
 
     def testAroundSet(self):
         self.assertEqual(self.found("node[amenity=pub]->.p;node(around.p:2000)[amenity];"), ["node/1", "node/2"])
+
+    def testAroundManyCentresGoesByTheirExtentAndAnIndex(self):
+        # Past AROUND_QUERIES_MAX centres the GOL is asked once, over their
+        # extent, and the distance is tested against an index of them.
+        with mock.patch.object(evaluator, "AROUND_QUERIES_MAX", 0):
+            self.assertEqual(self.found("node[amenity=pub]->.p;node(around.p:2000)[amenity];"), ["node/1", "node/2"])
+            self.assertEqual(self.found("node[name]->.n;way(around.n:60);"), ["way/200"])
+
+    def testAroundSetOnAnInputSetUsesTheIndexToo(self):
+        # node.h(around.w:100): the candidates come from a set, so every one
+        # is tested - this is the query that used to be quadratic.
+        self.assertEqual(self.found("way(200);>->.h;node(2)->.w;node.h(around.w:100);"), ["node/21"])
 
     def testAroundFindsWaysByTheirLine(self):
         self.assertEqual(self.found("way(around:100,50.02,10.02);"), ["way/200"])
@@ -211,6 +238,30 @@ class TestIf(EvaluatorCase):
         self.assertEqual(self.found("way[building](if: length() > 700 && length() < 760);"), ["way/101"])
 
 
+class TestCount(EvaluatorCase):
+    def testPlacesWithNoWayNearby(self):
+        # The shape of a real query: for each point, gather the ways around it
+        # together with the point, and keep the point when there are none.
+        # The bar has Main Street 55 m away; the pub and the cafe have nothing
+        # within 100 m.
+        result = self.run_script(
+            "node[amenity]->.c;"
+            "foreach .c -> .d ("
+            "  (way(around.d:100); .d;);"
+            "  node._(if:count(ways) == 0);"
+            "  out;"
+            ");"
+        )
+        self.assertIsNone(result.remark)
+        self.assertEqual([repr(e) for b in result.blocks for e in b.elements], ["node/1", "node/3"])
+
+    def testCountsTheDefaultSetByType(self):
+        self.assertEqual(
+            self.found("(way(200); >;);node._(if: count(nodes) == 3 && count(ways) == 1 && count(nwr) == 4);"),
+            ["node/20", "node/21", "node/22"],
+        )
+
+
 class TestSetsAndBlocks(EvaluatorCase):
     def testDifference(self):
         self.assertEqual(self.found("(node[amenity]; - node[amenity=pub];);"), ["node/2", "node/3"])
@@ -241,6 +292,13 @@ class TestLimits(EvaluatorCase):
         self.assertIn("ran out of memory", result.remark)
         # What was printed before the error still goes out.
         self.assertEqual([repr(e) for e in result.blocks[0].elements], ["node/1"])
+
+    def testTheLimitCountsMatchesNotCandidates(self):
+        # A key regex cannot narrow the GOL query, so every node streams by;
+        # only the one match is held, and a limit of 2 is not exceeded.
+        result = self.run_script('node[~"^addr:"~"."];out;', max_elements=2)
+        self.assertIsNone(result.remark)
+        self.assertEqual([repr(e) for e in result.blocks[0].elements], ["node/5"])
 
     def testBboxWithoutSettingIsARuntimeRemark(self):
         self.assertIn("[bbox:", self.run_script("node(bbox);out;").remark)

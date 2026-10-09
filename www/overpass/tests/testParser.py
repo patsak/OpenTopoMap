@@ -187,6 +187,23 @@ class TestStatements(unittest.TestCase):
             self.assertIsInstance(st, ForEach)
             self.assertEqual((st.input_set, st.loop_set, len(st.body)), ("a", "n", 1))
 
+    def testSpacesBeforeSetNames(self):
+        # Overpass ignores whitespace there; "foreach .c -> .d (" is how
+        # overpass-turbo users often write it.
+        (st,) = statements("foreach .c -> .d ( .d out; );")
+        self.assertEqual((st.input_set, st.loop_set), ("c", "d"))
+        (q,) = statements("node .a [amenity];")
+        self.assertEqual(q.input_sets, ["a"])
+        self.assertEqual(statements("node(around .p:20);")[0].filters, [AroundFilter(20, "p", [])])
+
+    def testCountIsAnAggregateOverATypeName(self):
+        (f,) = statements("node._(if: count(ways) == 0);")[0].filters
+        self.assertEqual(f.expr.left, Call("count", [f.expr.left.args[0]]))
+        self.assertEqual(f.expr.left.args[0].value, "ways")
+        with self.assertRaises(QLError) as ctx:
+            parse("node(if: count(lines) > 0);")
+        self.assertEqual(ctx.exception.kind, "static")
+
     def testMapToAreaAndIsIn(self):
         m, i, j = statements(".r map_to_area->.a; is_in(50.0,10.0); .n is_in->.where;")
         self.assertEqual(m, MapToArea(line=1, input_set="r", into="a"))
@@ -197,6 +214,13 @@ class TestStatements(unittest.TestCase):
         text = "// first\nnode(1); /* a\nblock */\nway(2);"
         a, b = statements(text)
         self.assertEqual((a.line, b.line), (2, 4))
+
+    def testCyrillicLetterInASetNameIsNamed(self):
+        # ".с" with a Cyrillic es, next to sets named with a Latin c.
+        for text in ("node(around.\u0441:100);", "node(around.c\u0441:100);", ".\u0441 out;"):
+            with self.subTest(text=text), self.assertRaises(QLError) as ctx:
+                parse(text)
+            self.assertIn("CYRILLIC SMALL LETTER ES (U+0441)", str(ctx.exception))
 
     def testErrorsCarryTheLine(self):
         with self.assertRaises(QLError) as ctx:

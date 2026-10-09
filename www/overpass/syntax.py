@@ -127,6 +127,19 @@ Filter = (
 # The functions an ``if:`` may call, with their arity. The parser refuses the
 # rest as a static error - the same answer Overpass gives for an unknown name -
 # so a typo never reaches the evaluator as a silently false condition.
+# count(<these>): the elements of a type in the set _ (Overpass's aggregate).
+COUNT_TYPES = {
+    "nodes": ("node",),
+    "ways": ("way",),
+    "relations": ("relation",),
+    "areas": ("area",),
+    "deriveds": (),
+    "nwr": ("node", "way", "relation"),
+    "nw": ("node", "way"),
+    "wr": ("way", "relation"),
+    "nr": ("node", "relation"),
+}
+
 FUNCTIONS = {
     "id": 0,
     "type": 0,

@@ -15,9 +15,14 @@ GOQL is only ever a prefilter. It is typed where Overpass is not: a value that
 looks like a number is stored as a number in a GOL, so ``[admin_level="4"]``
 and ``[admin_level~"^4$"]`` match nothing in GOQL while Overpass, comparing
 strings, matches every admin_level=4. GOQL's quoted strings are also globs
-(``"pu*"`` matches "pub"). So the selector only narrows - by key, and by value
-where the value is a plain string - and every tag filter is checked again here
-on the tag's string form, which is where the Overpass semantics live.
+(``"pu*"`` matches "pub"). ``[k]`` in GOQL means "k is there and is not no",
+where Overpass's ``[shop]`` takes shop=no as well. And GeoDesk 2.3 gets some
+combinations wrong outright: a ``[!k]`` on a key rare enough to be missing
+from the GOL's global string table, next to any other clause, drops features
+that have neither key. So the selector carries one positive clause - an
+equality, else "the key is there" written as ``[k], [k=no]`` - and every tag
+filter, that one included, is checked again here on the tag's string form,
+which is where the Overpass semantics live.
 
 One hard rule about GeoDesk 2.3: a query iterator abandoned before it is
 exhausted crashes the process (a segfault in the native extension, not an
@@ -31,11 +36,16 @@ import math
 import re
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 from geodesk import Box, Coordinate, Features, distance, to_mercator
+import numpy as np
+import shapely
+from shapely import STRtree
 from shapely.geometry import LineString, Point, Polygon
 
 from overpass.syntax import (
+    COUNT_TYPES,
     DEFAULT_SET,
     AreaFilter,
     AroundFilter,
@@ -103,6 +113,10 @@ _NUMBER = re.compile(r"\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*")
 # no glob character, and not number-shaped (those are stored as numbers).
 _GOQL_UNSAFE = re.compile(r"[\"\\*?\n]")
 
+# Up to this many centres an around is one GeoDesk query per centre; past it,
+# one query over their extent and an indexed test (Evaluator.world_query).
+AROUND_QUERIES_MAX = 32
+
 # How often the deadline is looked at while walking elements.
 _TICK_EVERY = 1000
 
@@ -132,9 +146,7 @@ class Element:
     def tags(self) -> dict[str, str]:
         """Tags as Overpass has them: every value a string, as written in OSM."""
         if self._tags is None:
-            f = self.feature
-            # Numbers come back as int/float; Feature.str gives the stored text.
-            self._tags = {k: v if isinstance(v, str) else f.str(k) for k, v in list(f.tags)}
+            self._tags = _tags_of(self.feature)
         return self._tags
 
     def __repr__(self) -> str:
@@ -142,6 +154,20 @@ class Element:
 
 
 ElementSet = dict[tuple[str, int], Element]
+
+
+def _tags_of(feature) -> dict[str, str]:
+    """A feature's tags with every value a string.
+
+    GeoDesk hands numbers back as int/float; Feature.str gives the stored
+    text. dict() first and a fix-up of the few non-strings after, because a
+    scan builds this millions of times.
+    """
+    tags = dict(feature.tags)
+    for k, v in tags.items():
+        if v.__class__ is not str:
+            return {k: v if v.__class__ is str else feature.str(k) for k, v in tags.items()}
+    return tags
 
 
 def element(feature) -> Element:
@@ -197,7 +223,6 @@ class Evaluator:
         self.line = 0
         self.statement_name = ""
         self._ticks = 0
-        self._regexes: dict[int, tuple[re.Pattern, re.Pattern | None]] = {}
 
     # --- bookkeeping --------------------------------------------------------
 
@@ -403,24 +428,28 @@ class Evaluator:
             else:
                 rest.append(f)
 
-        if sources:
-            candidates = {k: e for k, e in _intersect(sources).items() if e.kind in kinds}
-            spatial = [f for f in rest if not isinstance(f, (TagFilter, IfFilter))]
-        else:
-            candidates, spatial = self.world_query(q.element_type, kinds, rest)
-
         tag_filters = [f for f in rest if isinstance(f, TagFilter)]
         if_filters = [f for f in rest if isinstance(f, IfFilter)]
+        matchers = _tag_matchers(tag_filters)
+        if sources:
+            passed: list[Element] = []
+            for e in _intersect(sources).values():
+                self.tick()
+                if e.kind in kinds and all(m(e.tags) for m in matchers):
+                    passed.append(e)
+            spatial = [f for f in rest if not isinstance(f, (TagFilter, IfFilter))]
+        else:
+            passed, spatial = self.world_query(q.element_type, kinds, rest, tag_filters, matchers)
+        # Spatial filters go over the survivors all at once (see
+        # spatial_filter); only the if: conditions are left per element.
+        for f in spatial:
+            self.check_deadline()
+            passed = self.spatial_filter(f, passed)
         out: ElementSet = {}
-        for k, e in candidates.items():
+        for e in passed:
             self.tick()
-            if not all(self.tag_match(f, e) for f in tag_filters):
-                continue
-            if not all(self.spatial_match(f, e) for f in spatial):
-                continue
-            if not all(_truthy(self.evaluate(f.expr, e)) for f in if_filters):
-                continue
-            out[k] = e
+            if all(_truthy(self.evaluate(f.expr, e)) for f in if_filters):
+                out[e.key] = e
         return out
 
     def resolve_bbox(self, f: Filter) -> Filter:
@@ -431,16 +460,27 @@ class Evaluator:
         south, west, north, east = self.settings.bbox
         return BboxFilter(south=south, west=west, north=north, east=east)
 
-    def world_query(self, element_type: str, kinds, filters: list[Filter]) -> tuple[ElementSet, list[Filter]]:
-        """Candidates straight from the GOL.
+    def world_query(
+        self,
+        element_type: str,
+        kinds,
+        filters: list[Filter],
+        tag_filters: list[TagFilter],
+        matchers: list[Callable[[dict[str, str]], bool]],
+    ) -> tuple[list[Element], list[Filter]]:
+        """The elements from the GOL that pass *tag_filters*.
 
-        Returns them with the spatial filters still to be tested one by one:
-        GeoDesk's bbox filter goes by bounding boxes, so a way whose box
-        touches the bbox but whose line does not is let through and only the
-        exact test here drops it. around, poly and area are exact in GeoDesk.
+        Returned with the spatial filters still to be tested: GeoDesk's bbox
+        filter goes by bounding boxes, so a way whose box touches the bbox but
+        whose line does not is let through and only the exact test drops it.
+        around, poly and area are exact in GeoDesk, except an around over many
+        centres, which goes by their extent.
+
+        Tags are tested as the features stream in, so only the matches are
+        held: a key regex over a whole country, which GOQL cannot narrow,
+        walks every node there and keeps a handful.
         """
-        clauses = [c for c in (_goql_clause(f) for f in filters if isinstance(f, TagFilter)) if c]
-        selector = GOQL_TYPES[element_type] + "".join(clauses)
+        selector = _goql_selector(GOQL_TYPES[element_type], [f for f in filters if isinstance(f, TagFilter)])
         queries = [self.world(selector)]
         recheck: list[Filter] = []
         for f in filters:
@@ -450,7 +490,15 @@ class Evaluator:
                 recheck.append(f)
             elif isinstance(f, AroundFilter):
                 centres = self.around_centres(f)
-                queries = [q.around(c, meters=f.radius) for q in queries for c in centres]
+                if len(centres) <= AROUND_QUERIES_MAX:
+                    queries = [q.around(c, meters=f.radius) for q in queries for c in centres]
+                else:
+                    # Thousands of centres would be thousands of GeoDesk
+                    # queries. One over their common extent instead, and the
+                    # exact distance test afterwards, against an index of them.
+                    box = _extent(centres).buffer(meters=f.radius)
+                    queries = [q(box) for q in queries]
+                    recheck.append(f)
             elif isinstance(f, PolyFilter):
                 poly = _mercator_polygon(f.points)
                 queries = [q.intersecting(poly) for q in queries]
@@ -459,15 +507,37 @@ class Evaluator:
                 queries = [q.intersecting(a) for q in queries for a in areas]
 
         out: ElementSet = {}
+        stop: Exception | None = None
         for q in queries:
             self.check_deadline()
-            for feature in list(q):
-                self.tick()
-                e = area_element(feature) if element_type == "area" else element(feature)
-                if e.kind in kinds:
-                    out[e.key] = e
-            self.check_size(out)
-        return out, recheck
+            # Read to the end whatever happens: a GeoDesk iterator abandoned
+            # half-way crashes the process. A timeout, a set grown too big or
+            # an error only stop the work; the loop drains, then it is raised.
+            # A whole-country scan passes millions of features through here,
+            # most of them to be rejected: the tags are tested on a plain
+            # dict first, and an Element is only made for a match.
+            seen = 0
+            for feature in q:
+                if stop is not None:
+                    continue
+                try:
+                    seen += 1
+                    if seen % _TICK_EVERY == 0:
+                        self.check_deadline()
+                    tags = _tags_of(feature)
+                    if not all(m(tags) for m in matchers):
+                        continue
+                    e = area_element(feature) if element_type == "area" else element(feature)
+                    if e.kind in kinds and e.key not in out:
+                        e._tags = tags
+                        out[e.key] = e
+                        if len(out) > self.max_elements:
+                            self.check_size(out)
+                except Exception as exc:  # noqa: BLE001 - re-raised after the drain
+                    stop = exc
+            if stop is not None:
+                raise stop
+        return list(out.values()), recheck
 
     def by_id(self, kinds, ids: list[int]) -> ElementSet:
         out: ElementSet = {}
@@ -541,48 +611,53 @@ class Evaluator:
 
     # --- filters, one element at a time --------------------------------------
 
-    def tag_match(self, f: TagFilter, e: Element) -> bool:
-        tags = e.tags
-        op = f.op
-        if op == "exists":
-            return f.key in tags
-        if op == "not_exists":
-            return f.key not in tags
-        if op == "=":
-            return tags.get(f.key) == f.value
-        if op == "!=":
-            return tags.get(f.key) != f.value
-        key_re, value_re = self.regexes(f)
-        if op == "~":
-            return f.key in tags and bool(key_re.search(tags[f.key]))
-        if op == "!~":
-            return f.key not in tags or not key_re.search(tags[f.key])
-        # key~: some tag whose key matches the first and value the second.
-        return any(key_re.search(k) and value_re.search(v) for k, v in tags.items())
+    def spatial_filter(self, f: Filter, elements: list[Element]) -> list[Element]:
+        """The elements that pass a spatial filter, decided for all of them at once.
 
-    def regexes(self, f: TagFilter) -> tuple[re.Pattern, re.Pattern | None]:
-        cached = self._regexes.get(id(f))
-        if cached is None:
-            flags = re.IGNORECASE if f.ignore_case else 0
-            if f.op == "key~":
-                cached = (re.compile(f.key, flags), re.compile(f.value, flags))
-            else:
-                cached = (re.compile(f.value, flags), None)
-            self._regexes[id(f)] = cached
-        return cached
-
-    def spatial_match(self, f: Filter, e: Element) -> bool:
-        geom = _geometry(e)
+        All at once because a query like ``node.h(around.w:100)`` puts a
+        region's road nodes - over a million - against a set of centres, and
+        per element the Python around each test (a shapely point, an index
+        lookup) costs far more than the geometry: 18 s against well under one
+        in bulk. Here the elements become one array of shapes and every test
+        is one vectorised shapely call; only the few pairs that come close
+        are measured exactly.
+        """
+        if not elements:
+            return elements
+        geoms = _geometries(elements)
         if isinstance(f, BboxFilter):
-            box = Box(west=f.west, south=f.south, east=f.east, north=f.north)
-            return geom.intersects(box.shape)
-        if isinstance(f, PolyFilter):
-            return geom.intersects(_mercator_polygon(f.points))
-        if isinstance(f, AroundFilter):
-            return any(distance(geom, c, units="meters") <= f.radius for c in self.around_centres(f))
-        if isinstance(f, AreaFilter):
-            return any(geom.intersects(a.shape) for a in self.area_features(f))
-        raise TypeError(f)  # pragma: no cover
+            mask = shapely.intersects(Box(west=f.west, south=f.south, east=f.east, north=f.north).shape, geoms)
+        elif isinstance(f, PolyFilter):
+            mask = shapely.intersects(_mercator_polygon(f.points), geoms)
+        elif isinstance(f, AreaFilter):
+            mask = np.zeros(len(geoms), dtype=bool)
+            for area in self.area_features(f):
+                shape = area.shape
+                shapely.prepare(shape)
+                mask |= shapely.intersects(shape, geoms)
+        elif isinstance(f, AroundFilter):
+            mask = self.around_mask(f, geoms)
+        else:  # pragma: no cover
+            raise TypeError(f)
+        return [e for e, keep in zip(elements, mask) if keep]
+
+    def around_mask(self, f: AroundFilter, geoms: np.ndarray) -> np.ndarray:
+        mask = np.zeros(len(geoms), dtype=bool)
+        centres = [_as_geometry(c) for c in self.around_centres(f)]
+        if not centres:
+            return mask
+        tree = STRtree(centres)
+        # The index is in Mercator, which stretches with latitude: search
+        # with the radius as it is at the most poleward point involved, plus
+        # a margin, and let GeoDesk's distance in metres decide the pairs
+        # that turn up.
+        extent = _extent(list(geoms) + centres)
+        reach = to_mercator(meters=f.radius, lat=max(abs(extent.south), abs(extent.north))) * 1.05
+        near, centre = tree.query(geoms, predicate="dwithin", distance=reach)
+        for i, j in zip(near, centre):
+            if not mask[i] and distance(geoms[i], centres[j], units="meters") <= f.radius:
+                mask[i] = True
+        return mask
 
     def around_centres(self, f: AroundFilter) -> list:
         """What around measures from, in the forms GeoDesk takes."""
@@ -660,6 +735,9 @@ class Evaluator:
         name = expr.name
         args = [self.evaluate(a, e) for a in expr.args]
         f = e.feature
+        if name == "count":
+            kinds = COUNT_TYPES[args[0]]
+            return str(sum(1 for el in self.get(DEFAULT_SET).values() if el.kind in kinds))
         if name == "id":
             return str(e.id)
         if name == "type":
@@ -734,27 +812,70 @@ def _has_member(parent: Element, child: Element, role: str) -> bool:
     return any(m.id == child.id and m.osm_type == child.kind and m.role == role for m in list(parent.feature.members))
 
 
-def _goql_clause(f: TagFilter) -> str | None:
-    """The part of a tag filter GOQL can narrow by, or None.
+# Key patterns that match every key: [~".*"~"…"] asks about values only.
+_ANY_KEY = {"", ".", ".*", ".+", "^.*", ".*$", "^.*$", "^.+$"}
 
-    Never stricter than the filter itself: the exact test happens in
-    Evaluator.tag_match regardless.
+
+def _tag_matchers(filters: list[TagFilter]) -> list[Callable[[dict[str, str]], bool]]:
+    """One test per filter, the ones likeliest to reject first.
+
+    A positive filter ([k], [k=v], a regex) is what narrows a query; the
+    negations ([!k], [k!=v], [k!~re]) let nearly everything through. Run the
+    negations first and a scan pays for all of them on every feature only to
+    reject it at the last test - seven of them in a common shape of query.
     """
-    if _GOQL_UNSAFE.search(f.key):
-        return None
-    key = f'"{f.key}"'
-    if f.op == "exists":
-        return f"[{key}]"
-    if f.op == "not_exists":
-        return f"[!{key}]"
-    plain = f.value is not None and f.value != "" and not _GOQL_UNSAFE.search(f.value) and not _NUMBER.fullmatch(f.value)
-    if f.op == "=":
-        return f'[{key}="{f.value}"]' if plain else f"[{key}]"
-    if f.op == "!=":
-        return f'[{key}!="{f.value}"]' if plain else None
-    if f.op == "~":
-        return f"[{key}]"
-    return None
+    order = {"=": 0, "exists": 1, "~": 2, "key~": 3, "!=": 4, "not_exists": 4, "!~": 5}
+    return [_tag_matcher(f) for f in sorted(filters, key=lambda f: order[f.op])]
+
+
+def _tag_matcher(f: TagFilter) -> Callable[[dict[str, str]], bool]:
+    """A filter as a ready test on an element's tags.
+
+    Built once per query, not per element: a scan asks it millions of times,
+    and deciding the operator and finding the compiled regex each time cost
+    as much as the test.
+    """
+    key, value, op = f.key, f.value, f.op
+    if op == "exists":
+        return lambda tags: key in tags
+    if op == "not_exists":
+        return lambda tags: key not in tags
+    if op == "=":
+        return lambda tags: tags.get(key) == value
+    if op == "!=":
+        return lambda tags: tags.get(key) != value
+    flags = re.IGNORECASE if f.ignore_case else 0
+    if op == "~":
+        search = re.compile(value, flags).search
+        return lambda tags: key in tags and search(tags[key]) is not None
+    if op == "!~":
+        search = re.compile(value, flags).search
+        return lambda tags: key not in tags or search(tags[key]) is None
+    # key~: some tag whose key matches the first regex and value the second.
+    value_search = re.compile(value, flags).search
+    if key in _ANY_KEY:
+        return lambda tags: any(value_search(v) is not None for v in tags.values())
+    key_search = re.compile(key, flags).search
+    return lambda tags: any(key_search(k) is not None and value_search(v) is not None for k, v in tags.items())
+
+
+def _goql_selector(types: str, filters: list[TagFilter]) -> str:
+    """The GOQL query that narrows the candidates for *filters*.
+
+    One clause at most, and never stricter than the filters: an equality on a
+    plain string value if there is one, else a key that must be there. The
+    exact test happens in _tag_matcher regardless; GeoDesk's index on
+    the one key is where the speed comes from.
+    """
+    usable = [f for f in filters if not _GOQL_UNSAFE.search(f.key)]
+    for f in usable:
+        if f.op == "=" and f.value and not _GOQL_UNSAFE.search(f.value) and not _NUMBER.fullmatch(f.value):
+            return f'{types}["{f.key}"="{f.value}"]'
+    for f in usable:
+        if f.op in ("exists", "=", "~"):
+            # GOQL's [k] leaves out k=no, which Overpass's [k] keeps.
+            return f'{types}["{f.key}"], {types}["{f.key}"="no"]'
+    return types
 
 
 def _geometry(e: Element):
@@ -763,6 +884,33 @@ def _geometry(e: Element):
     if e.kind == "node":
         return Point(f.x, f.y)
     return f.shape
+
+
+def _as_geometry(centre):
+    """A Coordinate as a shapely point; shapes pass through."""
+    if isinstance(centre, Coordinate):
+        return Point(centre.x, centre.y)
+    return centre
+
+
+def _extent(shapes: list) -> Box:
+    minx, miny, maxx, maxy = shapely.total_bounds([_as_geometry(c) for c in shapes])
+    return Box(minx=int(minx), miny=int(miny), maxx=int(maxx), maxy=int(maxy))
+
+
+def _geometries(elements: list[Element]) -> np.ndarray:
+    """The elements' shapes in GeoDesk's Mercator, as one array: nodes made in
+    a single shapely.points call, which is what makes a million of them cheap."""
+    out = np.empty(len(elements), dtype=object)
+    nodes = [i for i, e in enumerate(elements) if e.kind == "node"]
+    if nodes:
+        xs = np.fromiter((elements[i].feature.x for i in nodes), dtype=np.float64, count=len(nodes))
+        ys = np.fromiter((elements[i].feature.y for i in nodes), dtype=np.float64, count=len(nodes))
+        out[nodes] = shapely.points(xs, ys)
+    for i, e in enumerate(elements):
+        if e.kind != "node":
+            out[i] = e.feature.shape
+    return out
 
 
 def _mercator_polygon(points: list[tuple[float, float]]):
