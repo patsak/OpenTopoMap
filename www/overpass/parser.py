@@ -16,8 +16,10 @@ message as is, so keeping that shape keeps them readable.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from overpass.syntax import (
+    COUNT_TYPES,
     DEFAULT_SET,
     FUNCTIONS,
     AreaFilter,
@@ -116,7 +118,29 @@ class QLError(Exception):
         self.message = message
 
 
+# overpass-turbo's and QuickOSM's macros: {{bbox}}, {{geocodeArea:...}},
+# {{center}}, {{style:...}}. The client replaces them before sending; one that
+# arrives here was sent by a client that does not.
+_MACRO = re.compile(r"\{\{\s*([A-Za-z]+)[^}]*\}\}")
+_MACRO_HINTS = {
+    "bbox": "write the box as south,west,north,east, e.g. (55.70,37.50,55.80,37.70)",
+    "geocodeArea": 'write the area by id, e.g. area(id:3600060189), or as area["name"="..."]',
+    "center": "write the point as lat,lon",
+}
+
+
 def parse(text: str) -> Script:
+    macro = _MACRO.search(text)
+    if macro:
+        name = macro.group(1)
+        hint = _MACRO_HINTS.get(name, "replace it with what it stands for")
+        line = text.count("\n", 0, macro.start()) + 1
+        raise QLError(
+            line,
+            "static",
+            f"{macro.group(0)} is a macro of overpass-turbo and QuickOSM, which they fill in before "
+            f"sending a query; the server does not. Choose an extent in the client, or {hint}",
+        )
     return _Parser(text).script()
 
 
@@ -260,14 +284,29 @@ class _Parser:
         """The name after a ``.``: ``_`` and plain identifiers."""
         self.skip()
         m = _IDENT.match(self.text, self.pos)
+        end = m.end() if m else self.pos
+        # A Cyrillic "с" or "а" typed into ".c" looks right and is another
+        # name. Overpass would take it as a different, empty set and answer
+        # wrongly without a word; say which character it is instead.
+        nxt = self.text[end : end + 1]
+        if nxt and not nxt.isascii() and nxt.isalnum():
+            raise self.fail(
+                f'set names are Latin letters, digits and "_": "{nxt}" is '
+                f"{unicodedata.name(nxt, 'a non-Latin character')} (U+{ord(nxt):04X})",
+                end,
+            )
         if not m:
             raise self.fail(f"a set name expected after \".\", found {self.describe()}")
         self.pos = m.end()
         return m.group(0)
 
     def optional_input(self) -> str:
-        """``.name`` glued to the keyword before it, or the default set."""
-        if self.text.startswith(".", self.pos):
+        """``.name`` after the keyword before it, or the default set.
+
+        Whitespace may come between them, as in Overpass: ``foreach .c`` is
+        ``foreach.c``.
+        """
+        if self.peek(".") and not self.peek(".."):
             self.pos += 1
             return self.set_name()
         return DEFAULT_SET
@@ -487,7 +526,7 @@ class _Parser:
 
     def query(self, line: int, element_type: str) -> Query:
         input_sets = []
-        while self.text.startswith(".", self.pos):
+        while self.peek(".") and not self.peek(".."):
             self.pos += 1
             input_sets.append(self.set_name())
         filters: list[Filter] = []
@@ -578,7 +617,7 @@ class _Parser:
             self.expect(")")
             return IdFilter(ids=ids)
         if w == "around":
-            input_set = self.optional_input() if self.text.startswith(".", self.pos) else None
+            input_set = self.optional_input() if self.peek(".") else None
             self.expect(":")
             radius = self.number()
             points = []
@@ -689,6 +728,15 @@ class _Parser:
             key = self.token()
             self.expect("]")
             return TagValue(key=key)
+        if name == "count":
+            # An aggregate over the set _, not a function of the element:
+            # count(ways) in "node._(if:count(ways) == 0)" counts the ways in _.
+            self.expect("(")
+            what = self.word()
+            if what not in COUNT_TYPES:
+                raise QLError(self.line(pos), "static", f'count() takes one of {", ".join(COUNT_TYPES)}, not "{what}"')
+            self.expect(")")
+            return Call(name="count", args=[Literal(what)])
         if name not in FUNCTIONS:
             raise QLError(self.line(pos), "static", f'unknown function "{name}"')
         self.expect("(")

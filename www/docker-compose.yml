@@ -133,8 +133,9 @@ services:
       # Where the GOL is merged and built before it is copied into data/gol/
       # (otmlib.gol): a volume of the Docker VM's own, because gol cannot
       # build on the data dir when that is a macOS directory Colima mounts
-      # over sshfs. Needs about three times the configured PBFs while it
-      # builds (the merged PBF and the GOL), ~12 GB for the stock config.
+      # over sshfs. Needs about seven times the configured PBFs while it
+      # builds (gol's sort files mostly), ~28 GB for the stock config; the
+      # build refuses to start with less than 8x free (otmlib.gol).
       OTM_GOL_WORK_DIR: /work
     volumes:
       - ./mapsvc/data:/app/data

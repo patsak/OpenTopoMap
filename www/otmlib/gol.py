@@ -43,12 +43,20 @@ import errno
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+# Free space a build needs in its work dir, as a multiple of the input PBFs'
+# total size: the merged PBF, gol's working files and the GOL it writes, at
+# their peak. Measured on the nine Russian federal districts: 4.2 GB of PBF,
+# 27.7 GB at the peak (6.6x) - gol's sort files dwarf the 6.6 GB GOL it ends
+# with. 8x leaves a margin.
+WORK_SPACE_FACTOR = 8.0
 
 
 def gol_binary() -> str:
@@ -68,6 +76,7 @@ def build(pbfs: list[Path], target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     work_root = work_dir() or target.parent
     work_root.mkdir(parents=True, exist_ok=True)
+    _require_space(pbfs, work_root)
     with tempfile.TemporaryDirectory(dir=work_root, prefix=".building-") as work:
         source = pbfs[0]
         if len(pbfs) > 1:
@@ -77,10 +86,46 @@ def build(pbfs: list[Path], target: Path) -> None:
         # gol appends ".gol" to the name it is given.
         scratch = Path(work) / "library"
         log.info("GOL: building %s", target)
-        subprocess.run([gol_binary(), "build", str(scratch), str(source), "-w"], check=True)
+        _run_gol_build(scratch, source, work_root)
         _move_into_place(scratch.with_suffix(".gol"), target)
     _write_state(pbfs, target, sources)
     log.info("GOL: %s is ready", target)
+
+
+class GolBuildError(RuntimeError):
+    pass
+
+
+def _require_space(pbfs: list[Path], work_root: Path) -> None:
+    """Refuse up front rather than let gol run out of disk half-way.
+
+    gol maps its working files into memory, so a full disk does not reach it
+    as ENOSPC: the kernel kills it with SIGBUS, hours into a build on a slow
+    machine, with nothing to say why.
+    """
+    need = int(sum(p.stat().st_size for p in pbfs) * WORK_SPACE_FACTOR)
+    free = shutil.disk_usage(work_root).free
+    if free < need:
+        raise GolBuildError(
+            f"building a GOL from {_gb(sum(p.stat().st_size for p in pbfs))} of PBF needs about "
+            f"{_gb(need)} free in {work_root}; there is {_gb(free)}"
+        )
+
+
+def _run_gol_build(scratch: Path, source: Path, work_root: Path) -> None:
+    try:
+        subprocess.run([gol_binary(), "build", str(scratch), str(source), "-w"], check=True)
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode == -signal.SIGBUS:
+            raise GolBuildError(
+                f"gol died with SIGBUS: {work_root} most likely ran out of space "
+                f"(there is {_gb(shutil.disk_usage(work_root).free)} free now that its files are gone)"
+            ) from exc
+        raise
+
+
+def _gb(n: int) -> str:
+    return f"{n / 1e9:.1f} GB"
 
 
 def work_dir() -> Path | None:
