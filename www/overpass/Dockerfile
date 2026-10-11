@@ -3,9 +3,6 @@
 # Build context is the repository root, like the other services (see
 # www/docker-compose.yml).
 #
-# linux/amd64 only: geodesk publishes its Linux wheels for x86_64 alone. On
-# Apple Silicon the image runs under emulation, which is fine for a GOL that is
-# read through mmap and queried.
 
 FROM --platform=linux/amd64 python:3.12-slim-trixie
 

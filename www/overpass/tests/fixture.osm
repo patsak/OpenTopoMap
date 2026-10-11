@@ -4,7 +4,8 @@
 
   Testtown (relation 1000) is the square 50.00-50.04 N, 10.00-10.04 E, drawn
   by the untagged way 100. Inside it: the pub (1), the bar (2), the bakery (5)
-  and the Hall (way 101). Outside: the cafe (3) and the peak (4). Main Street
+  and the Hall (way 101). Outside: the cafe (3), the peak (4), and a former shop
+  (7, shop=no). Main Street
   (way 200) runs west to east along 50.02 N, through the town and out of it.
   The Trail (relation 2000) holds Main Street, the pub as a stop and, as a
   sub-relation, Testtown itself. The pub is the newest edit in the town, the
@@ -32,6 +33,10 @@
     <tag k="shop" v="bakery"/>
     <tag k="name" v="Bäckerei"/>
     <tag k="addr:housenumber" v="12"/>
+  </node>
+  <node id="7" version="1" lat="50.0700000" lon="10.0700000">
+    <tag k="shop" v="no"/>
+    <tag k="opening_hours:covid19" v="off"/>
   </node>
   <node id="10" version="1" lat="50.0000000" lon="10.0000000"/>
   <node id="11" version="1" lat="50.0000000" lon="10.0400000"/>
