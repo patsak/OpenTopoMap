@@ -131,6 +131,22 @@ water takes the background colour.
 If a preview sits in “queued” for a long time, `datasvc-preview` is not running
 (`docker compose up -d datasvc-preview`) — the UI says so.
 
+## Hiking routes
+
+The page also plans hiking routes: **Plan a route** in the panel, then click
+the map to add points. Drag a point to move it, right-click it to drop it. The
+route comes from the routing service ([`www/routing`](../routing)), which
+nginx serves on the same origin under `/route/`. `GET /routing/config` tells
+the page where that is, `OTM_ROUTING_API` overriding it for a mapsvc run
+without nginx. Everything else happens in the browser (`static/route.js`):
+* the route is drawn by kind of going: trail, off trail (dashed), ford;
+* the panel shows distance, time, ascent and descent, with the backpack weight
+  and the off-trail switch as options;
+* an elevation profile sits under the map; its crosshair shows the spot on the
+  map;
+* **Download GPX** saves the track with elevations and the points as
+  waypoints.
+
 ## Where the data comes from
 
 For a bbox the service works out the smallest set of Geofabrik extracts that

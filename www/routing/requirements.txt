@@ -1,0 +1,12 @@
+flask>=3.0
+gunicorn>=22.0
+PyYAML>=6.0
+# The graph build: rasters and geometry. numpy and GDAL come from Debian
+# (python3-numpy, python3-gdal) so the GDAL bindings match their numpy.
+scipy>=1.10
+shapely>=2.0
+npyosmium>=4.0
+# The disk engine's A* (routing.engine.disk).
+numba>=0.61
+# The build finds the area's extracts in otm.regions (otmlib.regionsync).
+psycopg[binary]>=3.2

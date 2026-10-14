@@ -18,13 +18,14 @@ plus the TYP files `garmin/style/typ/opentopomap-hike.txt` and
 | `tools/validate_style.py` | checks the style against the config's layers, the sprite and the TYP palette |
 | `maplibregljs/otm_layers.json` | the style itself |
 | `maplibregljs/otm_style.js` | assembles the style: sources, Mapterhorn, contours, sprite |
-| `www/datasvc/` | the job: Geofabrik → PBF, kept current from the diffs, then the GOL `www/overpass` reads |
+| `www/datasvc/` | the job: Geofabrik → PBF, kept current from the diffs, then the GOL `www/overpass` reads, then the hiking router's graphs (`www/routing`) |
 | `www/datasvc/preview.py` | the preview worker: bbox → osmium extract → tilemaker → `.pmtiles` |
 | `www/otmlib/sql/` | the metadata schema in Postgres (osc sequences, regions, previews) |
 | `www/otmlib/` | Geofabrik (downloads, osc, bbox cutting), DEM, metadata |
 | `www/nginx.conf` | the front door: the built `.pmtiles` as files, everything else proxied to mapsvc |
 | `www/mapsvc/vectorbasemap.py` | the same cartography inside the map service |
 | `www/overpass/` | an Overpass API (`/api/interpreter`) over a GeoDesk GOL of one region — prototype, see its README |
+| `www/routing/` | hiking routes on and off trail (`/route/api/v1/route`): OSM trails plus an off-trail graph from the DEM — see its README |
 
 ## How it works
 

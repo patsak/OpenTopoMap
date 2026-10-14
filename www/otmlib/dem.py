@@ -1,9 +1,16 @@
-"""DEM download and conversion via GDAL Python API, with on-disk HGT cache."""
+"""DEM download and conversion via GDAL Python API, with on-disk HGT cache.
+
+One cache of 1° SRTM1 tiles (1 arc-second, ~30 m) cut out of GEDTM, for
+everything that reads relief: the Garmin contours and hill shading (mapsvc)
+and the hiking router's graphs (routing.build). Fetched the first time a
+degree is wanted, kept from then on.
+"""
 
 from __future__ import annotations
 
 import math
 import shutil
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -30,8 +37,10 @@ GEDTM_VSI_URL = (
     "gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif"
 )
 
-# SRTM3: 3 arc-second grid, 1201 x 1201 points per 1° tile
-HGT_SIDE = 1201
+# SRTM1: 1 arc-second grid, 3601 x 3601 points per 1° tile. (The cache held
+# SRTM3 tiles, 1201 x 1201, once: their size marks them stale, and each is
+# replaced by its SRTM1 tile the first time it is wanted.)
+HGT_SIDE = 3601
 HGT_BYTES = HGT_SIDE * HGT_SIDE * 2
 HGT_VOID = -32768
 
@@ -93,10 +102,13 @@ def _write_hgt_tile(
     north: float,
     out_path: Path,
 ) -> None:
-    """Warp a 1° cell to 1201x1201 Int16 HGT."""
+    """Warp a 1° cell to 3601x3601 Int16 HGT."""
+    # HGT samples sit on the degree lines (the reader's pixel-is-point), so the
+    # outermost ones reach half a sample past the cell
+    half = 0.5 / (HGT_SIDE - 1)
     warp_opts = gdal.WarpOptions(
         format="MEM",
-        outputBounds=[west, south, east, north],
+        outputBounds=[west - half, south - half, east + half, north + half],
         width=HGT_SIDE,
         height=HGT_SIDE,
         resampleAlg=gdal.GRA_Bilinear,
@@ -119,7 +131,7 @@ def _write_hgt_tile(
     if tmp.exists():
         tmp.unlink()
     # HGT is big-endian int16, row by row: one numpy conversion, because packing
-    # 1201x1201 samples one at a time takes tens of seconds per degree.
+    # millions of samples one at a time takes minutes per degree.
     tmp.write_bytes(np.ascontiguousarray(data, dtype=">i2").tobytes())
     if tmp.stat().st_size != HGT_BYTES:
         tmp.unlink(missing_ok=True)
@@ -139,7 +151,8 @@ def _fetch_full_hgt_tile(
     tmp_tif = dest.with_suffix(".tif.part")
     if tmp_tif.exists():
         tmp_tif.unlink()
-    translate_bbox_geotiff(west, south, east, north, tmp_tif, source_url=source_url)
+    pad = 1.0 / (HGT_SIDE - 1)
+    translate_bbox_geotiff(west - pad, south - pad, east + pad, north + pad, tmp_tif, source_url=source_url)
     src = gdal.Open(str(tmp_tif))
     if src is None:
         raise RuntimeError(f"Cannot open temporary GeoTIFF for {dest.name}")
@@ -173,8 +186,11 @@ def ensure_hgt_tiles(
     north: float,
     cache_dir: Path,
     log: LogFn | None = None,
+    attempts: int = 3,
 ) -> list[Path]:
-    """Return cached full 1° HGT tiles covering bbox; download missing ones."""
+    """Return cached full 1° HGT tiles covering bbox; download missing ones.
+    A degree is many remote reads, any of which may fail on a busy server: a
+    failed one is tried *attempts* times."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
     for lat, lon in tiles_for_bbox(west, south, east, north):
@@ -196,7 +212,16 @@ def ensure_hgt_tiles(
                         dest.unlink()
                     if log:
                         log(f"DEM download: {dest.name}")
-                    _fetch_full_hgt_tile(lat, lon, dest)
+                    for attempt in range(attempts):
+                        try:
+                            _fetch_full_hgt_tile(lat, lon, dest)
+                            break
+                        except RuntimeError as exc:
+                            if attempt == attempts - 1:
+                                raise
+                            if log:
+                                log(f"DEM download of {dest.name} failed ({exc}), trying again")
+                            time.sleep(10 * (attempt + 1))
                     if log:
                         log(f"DEM cached: {dest.name} ({dest.stat().st_size // 1024} KB)")
         paths.append(dest)

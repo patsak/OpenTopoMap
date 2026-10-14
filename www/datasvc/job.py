@@ -8,11 +8,19 @@ rendered here: tiles are built per drawn bbox, on demand, by
 Then, as a step of its own, the GOL www/overpass answers from is rebuilt out of
 the same files (:mod:`otmlib.gol`) - here rather than by something watching the
 extracts, because only this pass knows when it has finished writing them.
+
+Last, the hiking router's graphs are built out of the same files
+(:func:`build_routing`), for the same reason: only this pass knows the
+extracts are final.
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from otmlib import gol, pg, pgmeta, regionsync
 from otmlib.geofabrik import region_by_id
@@ -20,6 +28,9 @@ from otmlib.geofabrik import region_by_id
 from datasvc.config import Config
 
 log = logging.getLogger(__name__)
+
+# where ``python -m routing.…`` finds its package: /app in the image, www/ here
+APP_ROOT = Path(__file__).resolve().parent.parent
 
 
 def sync_regions(cfg: Config) -> list[regionsync.SyncResult]:
@@ -63,6 +74,36 @@ def build_gol(cfg: Config, results: list[regionsync.SyncResult]) -> bool:
     return True
 
 
+# The routing build is two commands of www/routing, each run as a process of
+# its own: what a build takes in memory (a tile's DEM and graph, the Caucasus
+# compiled) is given back when it ends, and its log goes to the job's.
+ROUTING_BUILD = ["-m", "routing.build", "--all"]
+ROUTING_COMPILE = ["-m", "routing.compile", "--all"]
+
+
+def build_routing(cfg: Config) -> bool:
+    """Build the hiking router's graphs out of the extracts just synced
+    (www/routing/config.yaml): the tiles whose data, DEM or parameters changed
+    - most nights a checksum per tile and nothing more - then the graphs whose
+    tiles moved. Returns whether both steps succeeded.
+
+    A failure is logged and left at that: the sync and the GOL are done by
+    now, and the routing service keeps the graphs it has. A tile that failed
+    is built the next night - it is not current.
+    """
+    if not cfg.routing:
+        return False
+    jobs = os.environ.get("OTM_ROUTING_JOBS", "").strip()
+    ok = True
+    for args in (ROUTING_BUILD + (["--jobs", jobs] if jobs else []), ROUTING_COMPILE):
+        log.info("routing: %s", " ".join(args[1:]))
+        done = subprocess.run([sys.executable, *args], cwd=APP_ROOT)
+        if done.returncode != 0:
+            log.error("routing: %s exited %s", args[1], done.returncode)
+            ok = False
+    return ok
+
+
 def run_once(cfg: Config) -> None:
     results = sync_regions(cfg)
     changed = [r.region.region_id for r in results if r.changed]
@@ -72,3 +113,4 @@ def run_once(cfg: Config) -> None:
         f"updated: {', '.join(changed)}" if changed else "nothing moved",
     )
     build_gol(cfg, results)
+    build_routing(cfg)

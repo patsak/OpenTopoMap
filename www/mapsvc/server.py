@@ -314,6 +314,17 @@ def vector_basemap_config():
     return jsonify(vector_config())
 
 
+@app.get("/routing/config")
+def routing_config():
+    """Where the page asks for routes: the routing service (www/routing).
+
+    Behind the stack's nginx it is /route/ on this same origin. A local run of
+    mapsvc on its own points OTM_ROUTING_API at wherever routing.server
+    listens - it allows any origin.
+    """
+    return jsonify({"api": os.environ.get("OTM_ROUTING_API", "/route/api/v1").strip() or "/route/api/v1"})
+
+
 @app.get("/vector/assets/<path:asset>")
 def vector_asset(asset: str):
     assets = style_dir()

@@ -298,7 +298,10 @@
   // app.js is a plain (non-deferred) script and always runs before Alpine's
   // deferred one, so this is already defined by the time Alpine evaluates it.
   window.garminApp = function garminApp() {
-    return {
+    // Route planning (route.js): plain state and methods, merged below. Not
+    // spread into the literal - that would evaluate this object's getters.
+    const routing = window.otmRouteMixin(() => map);
+    return Object.assign({
       bbox: null,
       status: { kind: "idle", text: "Select a bbox or upload an OSM/PBF file" },
       previewStatus: { kind: "idle", text: "" },
@@ -448,6 +451,7 @@
         this.setBasemap(savedBasemap === PREVIEW_BASEMAP_ID ? "osm" : savedBasemap);
 
         this.loadStyleSpec();
+        this.initRoute();
 
         this.refreshQueue();
         this.refreshHistory();
@@ -1011,6 +1015,6 @@
           pollTimer = setInterval(tick, 3000);
         }
       },
-    };
+    }, routing);
   };
 })();

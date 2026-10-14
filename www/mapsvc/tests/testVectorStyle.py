@@ -101,6 +101,24 @@ class TestRidgeLines(unittest.TestCase):
             self.assertIn(f'"{kind}"', natural_values)
 
 
+class TestGorgeLines(unittest.TestCase):
+    def setUp(self):
+        self.layers = {layer["id"]: layer for layer in styleLayers()}
+        self.lua = PROCESS_LUA.read_text(encoding="utf-8")
+
+    def testGorgesReachThePreviewAsCliffs(self):
+        natural_values = self.lua.split('local natural_values = Set {', 1)[1].split("}", 1)[0]
+        self.assertIn('"gorge"', natural_values)
+        for layer_id in ("cliff", "cliff-teeth"):
+            layer = self.layers[layer_id]
+            self.assertEqual(layer["source-layer"], "natural_lines")
+            self.assertIn("gorge", json.dumps(layer["filter"]))
+
+    def testGarminUsesTheCliffTypeForGorges(self):
+        lines = (REPO / "garmin/style/opentopomap-hike/lines").read_text(encoding="utf-8")
+        self.assertIn("natural=cliff | natural=gorge [0x31 resolution 21]", lines)
+
+
 class TestPeakAndSaddleLabels(unittest.TestCase):
     def setUp(self):
         self.layers = {layer["id"]: layer for layer in styleLayers()}

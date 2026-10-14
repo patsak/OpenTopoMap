@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OpenTopoMap Garmin — bbox</title>
+  <title>OpenTopoMap Garmin — bbox and routes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;650&display=swap" rel="stylesheet" />
@@ -15,7 +15,7 @@
   <header class="bar">
     <div class="brand">
       <strong>OpenTopoMap Garmin</strong>
-      <span class="muted">draw an area on the map and build an .img &middot;
+      <span class="muted">draw an area on the map and build an .img, or plan a hiking route &middot;
         <a class="repo" href="https://github.com/patsak/OpenTopoMap" target="_blank" rel="noopener noreferrer">GitHub</a>
       </span>
     </div>
@@ -37,7 +37,20 @@
   </header>
 
   <main class="layout">
-    <div id="map"></div>
+    <div class="map-column">
+      <div id="map"></div>
+      <section class="profile" x-show="routeSummary" aria-label="Elevation profile">
+        <div class="profile-head">
+          <span class="profile-title">Elevation, m</span>
+          <ul class="going-legend">
+            <template x-for="g in routeGoing" :key="g.id">
+              <li><span class="key" :class="g.id" :style="`--c:${g.color}`"></span><span x-text="g.label"></span></li>
+            </template>
+          </ul>
+        </div>
+        <div class="profile-plot" x-ref="profile"></div>
+      </section>
+    </div>
     <aside class="panel">
       <h1>Area</h1>
       <p class="hint">Draw a rectangle with the tool on the map (no side longer than 500 km), or upload an .osm / .pbf file of up to 200 MB.</p>
@@ -67,6 +80,48 @@
       <pre class="log" x-ref="log" x-show="logVisible" x-text="log"></pre>
       <a class="btn primary download" x-show="downloadVisible" :href="downloadHref">Download ZIP</a>
 
+      <h2>Route</h2>
+      <p class="hint">A hiking route through the points you click, on trails and off them: along valleys, over passes, around cliffs and rivers too big to ford.</p>
+      <p class="hint routing-areas" x-show="routeAreaNames.length" x-text="`Routing areas: ${routeAreaNames.join(', ')}.`"></p>
+      <div class="route-actions">
+        <button type="button" class="btn" :class="routeMode ? 'primary' : 'ghost'" @click="toggleRouteMode()" x-text="routeMode ? 'Adding points…' : 'Plan a route'"></button>
+        <button type="button" class="btn ghost" :disabled="!routePoints.length" @click="undoRoutePoint()">Undo</button>
+        <button type="button" class="btn ghost" :disabled="!routePoints.length" @click="clearRoute()">Clear</button>
+      </div>
+      <div class="route-options">
+        <label class="check"><input type="checkbox" x-model="routeOffroad" @change="onRouteOptionsChange()" /> off trail too</label>
+        <label class="pack">Backpack
+          <input type="number" min="0" max="40" step="1" x-model.number="routePack" @change="onRouteOptionsChange()" /> kg
+        </label>
+      </div>
+      <div class="route-options passes-options">
+        <label>Passes up to
+          <select x-model="routeMaxGrade" @change="onRouteOptionsChange()">
+            <option value="">any</option>
+            <template x-for="g in routeGrades" :key="g"><option :value="g" x-text="g"></option></template>
+          </select>
+        </label>
+        <label x-show="routeMaxGrade">at most
+          <input type="number" min="0" max="9" step="1" placeholder="∞" x-model="routeTopPasses" @change="onRouteOptionsChange()" />
+          of it
+        </label>
+      </div>
+      <div class="route-options">
+        <label class="check"><input type="checkbox" x-model="routeUnrated" @change="onRouteOptionsChange()" /> passes without a grade</label>
+      </div>
+      <div class="status" :class="routeStatus.kind" x-show="routeStatus.text" x-text="routeStatus.text"></div>
+      <dl class="bbox route-summary" x-show="routeSummary">
+        <div><dt>Distance</dt><dd x-text="routeSummary && routeSummary.distance"></dd></div>
+        <div><dt>Time</dt><dd x-text="routeSummary && (routeSummary.duration + (routeSummary.pack ? ` · ${routeSummary.pack} kg` : ''))"></dd></div>
+        <div><dt>Ascent</dt><dd x-text="routeSummary && routeSummary.ascent"></dd></div>
+        <div><dt>Descent</dt><dd x-text="routeSummary && routeSummary.descent"></dd></div>
+        <div><dt>Off trail</dt><dd x-text="routeSummary && routeSummary.offroad"></dd></div>
+        <div x-show="routePasses.length"><dt>Passes</dt>
+          <dd><template x-for="ps in routePasses"><div x-text="`${ps.name} (${ps.grade})`"></div></template></dd>
+        </div>
+      </dl>
+      <button type="button" class="btn primary download" x-show="routeSummary" @click="downloadGpx()">Download GPX</button>
+
       <h2>Recent maps</h2>
       <input class="field-input" type="search" placeholder="Search by name" autocomplete="off" x-model="historyFilter" />
       <p class="hint" x-show="!filteredHistoryJobs.length" x-text="historyJobs.length ? 'Nothing found.' : 'No saved builds yet.'">No saved builds yet.</p>
@@ -93,6 +148,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="/static/route.js"></script>
   <script src="/static/app.js"></script>
   <!-- app.js is a plain (non-deferred) script, so it always finishes before
        this deferred one runs and evaluates x-data="garminApp()" above. -->

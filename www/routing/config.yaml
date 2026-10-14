@@ -1,0 +1,191 @@
+# Mountain areas the routing service builds graphs for, and the terrain model.
+#
+# Areas, not whole regions: the off-trail graph is dense (a node every 150 m,
+# a valley line every few hundred metres), so it is built for the mountains
+# people hike, not for a federal district. Each area must lie inside the
+# regions datasvc keeps current (its config.yaml); the build cuts the area out
+# of those extracts. A graph is rebuilt after a sync that changed them, or
+# when anything below changes.
+#
+# Every parameter below is the default the code has (routing/config.py); they
+# are spelled out so a tuning session starts from here.
+areas:
+  - name: khibiny
+    bbox: [33.35, 67.58, 34.05, 67.85]   # west, south, east, north
+    within: [russia/northwestern-fed-district]
+
+  # Whole mountain systems, cut into tiles (routing.build.tiles): only the
+  # tiles inside the Russian federal districts named in `within` and with
+  # real relief are built; routing.compile joins them into one graph.
+  # Valley lines sparser than a single massif's - from 0.5 km2, nodes every
+  # 120 m - to keep the graph within a few GB on disk.
+  - name: caucasus             # Greater Caucasus, Anapa to Dagestan
+    bbox: [37.0, 41.1, 48.6, 45.1]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/south-fed-district, russia/north-caucasus-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+  - name: altai                # Altai Republic and the foothills in Altai Krai
+    bbox: [83.5, 49.5, 89.9, 52.8]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+  - name: tunka                # Tunkinsky Goltsy and the Tunka valley, Buryatia
+    bbox: [100.6, 51.5, 103.0, 52.2]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: western_sayan       # Western Sayan: Shapshal to Ergaki and the Kazyr
+    bbox: [89.5, 51.5, 96.6, 53.6]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: barguzin            # Barguzin Range, along the north-east shore of Baikal
+    bbox: [108.6, 53.4, 111.6, 55.9]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: south_muya          # South Muya Range, between the Muya and the Vitim
+    bbox: [112.8, 55.8, 116.8, 56.7]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: kodar               # Kodar, Zabaykalsky Krai
+    bbox: [116.8, 56.3, 119.3, 57.3]
+    tile_km: 60
+    min_relief_m: 500
+    within: [russia/siberian-fed-district]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  # The northern Tian Shan, both sides of the Kazakh-Kyrgyz border: tiles
+  # are kept by their relief inside either country.
+  - name: zailiysky           # Trans-Ili Alatau above Almaty, and the Chon-Kemin
+    bbox: [75.6, 42.75, 79.0, 43.45]
+    tile_km: 60
+    min_relief_m: 500
+    within: [asia/kazakhstan, asia/kyrgyzstan]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: terskey             # Terskey Ala-Too, south of Issyk-Kul
+    bbox: [76.0, 41.7, 80.3, 42.6]
+    tile_km: 60
+    min_relief_m: 500
+    within: [asia/kazakhstan, asia/kyrgyzstan]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+  - name: kyrgyz_range        # Kyrgyz Ala-Too, south of Bishkek
+    bbox: [72.6, 42.2, 76.0, 42.95]
+    tile_km: 60
+    min_relief_m: 500
+    within: [asia/kazakhstan, asia/kyrgyzstan]
+    graph: {lattice_spacing_m: 150, valley_catchment_km2: 0.5, thalweg_node_spacing_m: 120}
+
+graph:
+  lattice_spacing_m: 150       # the triangular grid off the lines of the terrain
+  lattice_penalty: 1.3         # weight multiplier on it: prefer valleys, passes, trails
+  bank_penalty: 1.15           # lake/large-river bank: below lattice, above fall lines
+  connector_penalty_s: 60      # stepping off a trail (and back on) costs this
+  thalweg_leave_penalty_s: 120 # so does leaving a valley floor for the lattice: no loops round DEM kinks
+  valley_catchment_km2: 0.2    # a line of falling water starts at this catchment
+  thalweg_node_spacing_m: 75
+  osm_connect_radius_m: 90
+  line_osm_connect_radius_m: 30
+  sample_step_m: 20            # edges are costed piece by piece this long
+  dem_res_m: 30
+  margin_m: 2000               # DEM/OSM read this far around the area
+  catchment_margin_m: 25000    # river sizes from a coarse DEM this far around,
+  catchment_res_m: 90          # so streams rising outside keep their catchment
+  hydrology: auto              # grass | numpy | auto
+  pass_ring_max_m: 400         # a pass looks for its two low sides out to this radius
+  pass_min_drop_m: 3
+  pass_zone_angle_deg: 45      # below a pass, a sector this wide towards each valley...
+  pass_zone_max_m: 4000        # ...this long, where steepness closes nothing (OSM cliffs, falls do)
+  pass_zone_apex_m: 300        # its narrow end: this much ridge, centred on the pass
+  pass_bypass_radius_m: 1200   # category limits also close higher crossings of the nearby ridge
+  steep_min_speed_kmh: 0.1     # such going is never slower than this (100 m/h, fixed ropes)
+  pass_cliff_time_s: 3600      # a mapped cliff in a pass zone is climbed: an hour more...
+  pass_cliff_penalty_s: 86400  # ...and a day more weight, per edge across it: the last resort
+  ridge_catchment_km2: 1       # crests: divides between the basins of streams this big...
+  ridge_node_spacing_m: 150    # ...cut into edges this long
+
+ford:
+  max_catchment_km2: 50        # bigger: across only at a marked ford or a bridge
+  max_width_m: 8               # ...or wider, where OSM gives width
+  glacier_factor: 3            # a glaciated km2 upstream counts 1 + this
+  crossing_base_s: 600         # off trail, wading a smaller one weighs this...
+  crossing_penalty_s: 60       # ...plus this x sqrt(catchment km2): crossed when it pays
+  free_below_km2: 1            # brooks below this are stepped over
+  marked_ford_time_s: 300
+  osm_match_m: 150             # a DEM channel this close to OSM water is that water
+
+obstacles:
+  max_slope_deg: 40            # steeper ground is not walked at all
+  cliff_slope_deg: 45          # DEM cliffs: patches steeper than this...
+  cliff_min_cells: 4           # ...of at least this many cells
+  canyon_wall_slope_deg: 38    # DEM canyon: both walls average this...
+  canyon_band_m: 60            # ...over this distance from the floor...
+  canyon_min_depth_m: 25       # ...and rise at least this high
+  canyon_min_cells: 3
+  barrier_lines:               # only an OSM way crosses these
+    - natural=cliff
+    - barrier=wall
+    - barrier=fence
+    - railway=rail
+    - highway=motorway
+    - highway=trunk
+
+side_slope:                    # walking across a slope
+  free_deg: 15                 # slower beyond this (time)...
+  factor_at_35: 0.3
+  penalty_from_deg: 25         # ...and avoided beyond this (weight only):
+  penalty_per_10deg: 1.0       # x2 at 35 degrees, x2.5 at 40
+
+crevasse:                      # not a barrier, but avoided (weight) and slow (time)
+  osm_penalty: 3               # a mapped crevasse field (natural=crevasse) weighs x(1+this)...
+  osm_slowdown: 0.5            # ...and takes x(1+this) as long
+  osm_line_buffer_m: 30        # a mapped single crevasse counts this far either side
+  glacier_from_deg: 12         # glacier steeper than this is crevassed (off trail)...
+  glacier_full_deg: 30         # ...most of all from here on, an icefall...
+  glacier_penalty: 2           # ...where it weighs x(1+this)
+
+descent:                       # straight down a long steep slope: avoided (weight only)
+  from_deg: 15                 # descending steeper than this...
+  penalty_per_10deg: 1.0       # ...weighs x(1 + this per 10 degrees beyond)...
+  min_drop_m: 100              # ...where the slope drops at least this much
+
+ridge:                         # walking a crest: the sharper, the slower and the dearer
+  flank_m: 40                  # sharpness: the slope this and 1.5x this either side, the gentler flank counts
+  free_deg: 20                 # no change up to this...
+  factor_at_40: 0.4            # ...then slower, down to x this at 40 degrees...
+  penalty_per_10deg: 1.0       # ...and weighing x(1 + this per 10 degrees beyond free_deg)
+  knife_deg: 50                # a knife edge: still walkable...
+  knife_penalty: 10            # ...but weighing x this on top
+
+pack:                          # a backpack, per 10 kg (request: pack_kg); no rebuild
+  flat_per_10kg: 0.03          # slower everywhere by this...
+  climb_per_10kg: 0.06         # ...plus this per 10% of climb...
+  descent_per_10kg: 0.04       # ...or of descent...
+  rough_per_10kg: 0.15         # ...plus this x roughness (1 - how fast the ground lets you go)
+  steep_descent_per_10kg: 0.5  # the steep-descent weight grows by this of itself
+  max_kg: 40                   # heavier requests are refused
+
+terrain_speed:                 # x Tobler's hiking speed; 0 = impassable
+  path: 1.0
+  grass: 0.8                   # grassland, meadow, fell, tundra
+  heath: 0.65
+  wood: 0.6
+  scree: 0.5                   # scree, shingle
+  bare_rock: 0.45
+  wetland: 0.35
+  scrub: 0.3
+  glacier: 0.5
+  unknown: 0.7

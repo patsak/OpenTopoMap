@@ -1,6 +1,6 @@
 # The whole OpenTopoMap stack: the map service (the web app, its API and the
-# Garmin builds), the data job, the preview worker, the Overpass API, and the
-# nginx in front of all of them - the one entry point, serving the built
+# Garmin builds), the data job, the preview worker, the Overpass API, the
+# hiking router and its graph build, and the nginx in front of all of them - the one entry point, serving the built
 # previews itself and proxying the rest.
 #
 #   cd www && docker compose up --build
@@ -125,10 +125,15 @@ services:
     # own OOM killer ends the job and the host survives. --store keeps the bulk
     # of tilemaker's working set on disk (see tilemaker.py), which is what makes
     # a few GB enough here at all.
-    mem_limit: ${OTM_DATASVC_MEM:-6g}
+    # 12 GB: the routing step is the larger - up to ~5 GB a tile while it
+    # builds (OTM_ROUTING_JOBS at once), ~7 GB compiling the Caucasus; it runs
+    # after tilemaker and gol, never beside them.
+    mem_limit: ${OTM_DATASVC_MEM:-12g}
     environment:
       OTM_DATA_DIR: /app/data
       DATABASE_URL: postgresql://otm:otm@postgres:5432/otm
+      # routing graph tiles built at once (datasvc.job.build_routing)
+      OTM_ROUTING_JOBS: ${OTM_ROUTING_JOBS:-2}
       OTM_TILEMAKER_THREADS: ${OTM_TILEMAKER_THREADS:-2}
       # Where the GOL is merged and built before it is copied into data/gol/
       # (otmlib.gol): a volume of the Docker VM's own, because gol cannot
@@ -142,6 +147,7 @@ services:
       - ../vector/tilemaker:/app/vector/tilemaker:ro
       - ./datasvc:/app/datasvc:ro
       - ./otmlib:/app/otmlib:ro
+      - ./routing:/app/routing:ro
       - gol_work:/work
     depends_on:
       postgres:
@@ -208,6 +214,40 @@ services:
       retries: 3
       start_period: 10s
 
+  # Hiking routes on and off trail (www/routing): POST /route/api/v1/route,
+  # GeoJSON points in, GeoJSON route out. Answers from the graphs
+  # datasvc-job compiles into data/routing/graphs/ - 503 for an area until its
+  # graph exists, and a rebuilt graph is picked up on the next request.
+  routing:
+    build:
+      context: ..
+      dockerfile: www/routing/Dockerfile
+    image: ghcr.io/patsak/opentopomap-routing:latest
+    expose:
+      - "8080"
+    # The disk engine maps the compiled graphs (data/routing/graphs/) and keeps
+    # only what a search touches: ~100 MB per search on the Caucasus.
+    mem_limit: ${OTM_ROUTING_MEM:-1g}
+    environment:
+      OTM_DATA_DIR: /app/data
+      OTM_ROUTING_THREADS: ${OTM_ROUTING_THREADS:-4}
+      # LLVM can otherwise select host-specific Apple ARM instructions that
+      # are reported by the Colima VM but trap with SIGILL inside it.
+      NUMBA_CPU_NAME: ${NUMBA_CPU_NAME:-generic}
+      # the engine over the compiled graphs (routing.graphstore.ENGINES)
+      OTM_ROUTING_ENGINE: ${OTM_ROUTING_ENGINE:-disk}
+    volumes:
+      # Read-only: datasvc-job is what writes data/routing/.
+      - ./mapsvc/data:/app/data:ro
+      - ./routing/config.yaml:/app/routing/config.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/route/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # The front door, and the only service bound to a host port: the page, the
   # API and the built previews on one origin (see nginx.conf). Requests are
   # proxied to mapsvc, except /previews/ - one .pmtiles per area, read
@@ -227,6 +267,8 @@ services:
       mapsvc:
         condition: service_started
       overpass:
+        condition: service_started
+      routing:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]

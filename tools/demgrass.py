@@ -8,15 +8,12 @@ GPKG/GeoJSON/Shapefile or as a JOSM reference layer. That common half lives here
 
 from __future__ import annotations
 
-import contextlib
 import itertools
-import math
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable
 from xml.etree import ElementTree as ET
 
 from osgeo import gdal, ogr, osr
@@ -25,6 +22,12 @@ gdal.UseExceptions()
 osr.UseExceptions()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# otmlib (www/otmlib) holds the GRASS plumbing the routing graph build shares.
+if str(REPO_ROOT / "www") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "www"))
+
+from otmlib import grass as otm_grass  # noqa: E402
+
 DEM_SUFFIXES = (".tif", ".tiff", ".vrt", ".hgt", ".img", ".dem", ".dt1", ".dt2", ".asc")
 
 OGR_DRIVERS = {
@@ -47,7 +50,6 @@ def log(message: str) -> None:
 
 def gedtm_source() -> str:
     """The global 30 m DTM the services already use (also sets GDAL's http tuning)."""
-    sys.path.insert(0, str(REPO_ROOT / "www"))
     try:
         from otmlib import dem as otm_dem
     except ImportError as exc:  # numpy/otmlib missing -> say what to install
@@ -101,9 +103,7 @@ def source_center_lonlat(source: str) -> tuple[float, float]:
     return lon, lat
 
 
-def utm_epsg(lon: float, lat: float) -> int:
-    zone = int(math.floor((lon + 180.0) / 6.0)) % 60 + 1
-    return (32600 if lat >= 0 else 32700) + zone
+utm_epsg = otm_grass.utm_epsg
 
 
 def prepare_dem(
@@ -163,56 +163,21 @@ def dem_for_args(args, bbox, work_dir: Path) -> Path:
 
 
 def grass_executable() -> str:
-    env = os.environ.get("GRASS_BIN", "").strip()
-    if env:
-        return env
-    for name in ("grass", "grass85", "grass84", "grass83"):
-        found = shutil.which(name)
-        if found:
-            return found
-    for app in sorted(Path("/Applications").glob("GRASS-*.app"), reverse=True):
-        candidate = app / "Contents/Resources/bin/grass"
-        if candidate.is_file():
-            return str(candidate)
-    raise SystemExit(
-        "GRASS not found: install it (brew install --cask grass or grass-gis) "
-        "or point GRASS_BIN at the grass launcher"
-    )
+    try:
+        return otm_grass.grass_executable()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
 
 
 def import_grass_script(grass_bin: str | None = None):
     """Put GRASS' own python package on sys.path and import grass.script."""
-    grass_bin = grass_bin or grass_executable()
     try:
-        python_path = subprocess.run(
-            [grass_bin, "--config", "python_path"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise SystemExit(f"cannot query {grass_bin} --config python_path: {exc}") from exc
-    if python_path not in sys.path:
-        sys.path.append(python_path)
-    import grass.script as gs  # noqa: PLC0415  (only importable once the path is set)
-
-    return gs
+        return otm_grass.import_grass_script(grass_bin or grass_executable())
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
 
 
-@contextlib.contextmanager
-def dem_project(gs, dem_tif: Path, work_dir: Path, name: str) -> Iterator[dict]:
-    """A throwaway GRASS project holding the DEM as raster ``dem``.
-
-    Yields the region so the caller can turn cell counts into square kilometres.
-    """
-    grassdata = work_dir / "grassdata"
-    grassdata.mkdir(parents=True, exist_ok=True)
-    project = grassdata / name
-    if project.exists():
-        shutil.rmtree(project)
-    gs.create_project(str(project), filename=str(dem_tif))
-    with gs.setup.init(str(project)):
-        gs.run_command("r.in.gdal", input=str(dem_tif), output="dem", overwrite=True)
-        gs.run_command("g.region", raster="dem")
-        yield gs.region()
+dem_project = otm_grass.dem_project
 
 
 def flow_accumulation(gs, elevation: str, output: str, args) -> None:

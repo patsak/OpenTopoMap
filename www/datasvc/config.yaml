@@ -8,7 +8,9 @@
 #
 # All of Russia, district by district. russia/kaliningrad is not listed: the
 # northwestern district's extract already contains it whole, so it would be a
-# second download of the same data.
+# second download of the same data. Then Kazakhstan and Kyrgyzstan, for the
+# Tian Shan ranges the hiking router covers (Trans-Ili Alatau, Terskey,
+# Kyrgyz Ala-Too).
 regions:
   - russia/central-fed-district
   - russia/northwestern-fed-district
@@ -19,11 +21,20 @@ regions:
   - russia/siberian-fed-district
   - russia/far-eastern-fed-district
   - russia/crimean-fed-district
+  - asia/kazakhstan
+  - asia/kyrgyzstan
 
 # Build the GOL www/overpass answers from: every region above, whichever they
 # are, merged into data/gol/regions.gol and rebuilt after a sync whenever the
 # extracts changed (datasvc.job.build_gol). false skips the step.
 gol: true
+
+# Build the hiking router's graphs (www/routing/config.yaml) after the GOL:
+# the tiles whose OSM data, DEM or parameters changed, then the graphs those
+# tiles make up - most nights a checksum per tile and nothing else (see
+# datasvc.job.build_routing). OTM_ROUTING_JOBS tiles at once. false leaves the
+# graphs alone.
+routing: true
 
 # Shared with mapsvc. Empty means OTM_DATA_DIR, then www/mapsvc/data.
 data_dir: ""

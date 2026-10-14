@@ -24,9 +24,14 @@ from otmlib.proc import check_cancelled, run, worker_count
 
 log = logging.getLogger(__name__)
 
-# id space reserved per DEM tile for pyhgtmap output (~1.5M nodes per 1°x1° tile)
+# id space reserved per DEM tile for pyhgtmap output (a few million nodes per
+# 1°x1° SRTM1 tile at 20 m)
 ID_BASE = 10_000_000
 ID_STRIDE = 100_000_000
+# Contours are traced on the 30 m SRTM1 grid (otmlib.dem) and simplified to
+# within this many degrees (~4.5 m): the shape of the 30 m relief at about the
+# node count a 90 m grid gave - three times fewer than unsimplified.
+CONTOUR_SIMPLIFY_DEG = 0.00004
 CONTOUR_JOBS_ENV = "OTM_PYHGTMAP_JOBS"
 
 
@@ -247,6 +252,7 @@ def _generate_contours(dem: str, out_dir: str, step: int, start_id: int, prefix:
             [
                 f"--step={step}",
                 "--line-cat=100,50",
+                f"--simplifyContoursEpsilon={CONTOUR_SIMPLIFY_DEG}",
                 "--pbf",
                 f"--start-node-id={start_id}",
                 f"--start-way-id={start_id}",

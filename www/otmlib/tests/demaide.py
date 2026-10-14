@@ -1,4 +1,4 @@
-"""Real SRTM3 HGT tiles for the DEM cache — the format otmlib.dem reads."""
+"""Real SRTM1 HGT tiles for the DEM cache — the format otmlib.dem reads."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def ramp(low_m: float, high_m: float) -> Surface:
 
 
 def makeHgtTile(cache_dir: Path, lat: int, lon: int, surface: Surface) -> Path:
-    """Write one 1° SRTM3 HGT tile into *cache_dir*."""
+    """Write one 1° SRTM1 HGT tile into *cache_dir*."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     # HGT rows run north to south, columns west to east, corners inclusive.
     lats = np.linspace(lat + 1, lat, HGT_SIDE)

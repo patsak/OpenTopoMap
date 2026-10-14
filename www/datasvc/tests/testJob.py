@@ -79,18 +79,56 @@ class TestSyncRegions(JobCase):
 
 
 class TestRunOnce(JobCase):
-    def testTheWholePassIsTheSyncThenTheGol(self):
+    def testTheWholePassIsTheSyncThenTheGolThenTheRoutingGraphs(self):
         results = [syncResult()]
         calls = mock.Mock()
         calls.sync.return_value = results
         with (
             mock.patch.object(job, "sync_regions", new=calls.sync),
             mock.patch.object(job, "build_gol", new=calls.gol),
+            mock.patch.object(job, "build_routing", new=calls.routing),
         ):
             job.run_once(self.cfg)
-        # The GOL is built after the sync, never before, out of its results.
-        self.assertEqual([c[0] for c in calls.mock_calls], ["sync", "gol"])
+        # The GOL is built after the sync, never before, out of its results;
+        # the routing graphs once the extracts are final.
+        self.assertEqual([c[0] for c in calls.mock_calls], ["sync", "gol", "routing"])
         calls.gol.assert_called_once_with(self.cfg, results)
+        calls.routing.assert_called_once_with(self.cfg)
+
+
+class TestBuildRouting(JobCase):
+    def setUp(self):
+        super().setUp()
+        self.cfg = Config(data_dir=self.tmp, regions=self.cfg.regions, routing=True)
+
+    def run_with(self, *codes, jobs=None):
+        env = {"OTM_ROUTING_JOBS": jobs} if jobs else {}
+        with (
+            mock.patch.dict("os.environ", env),
+            mock.patch("datasvc.job.subprocess.run",
+                       side_effect=[mock.Mock(returncode=c) for c in codes]) as run,
+        ):
+            ok = job.build_routing(self.cfg)
+        return ok, [c.args[0][1:] for c in run.call_args_list]
+
+    def testBuildsTheTilesThenCompilesTheGraphs(self):
+        ok, commands = self.run_with(0, 0, jobs="3")
+        self.assertTrue(ok)
+        self.assertEqual(commands, [["-m", "routing.build", "--all", "--jobs", "3"],
+                                    ["-m", "routing.compile", "--all"]])
+
+    def testCompilesWhatIsWholeEvenWhenATileFailed(self):
+        # the rest of the graphs move on; the failed tile is not current, so
+        # the next night builds it
+        ok, commands = self.run_with(1, 0)
+        self.assertFalse(ok)
+        self.assertEqual(len(commands), 2)
+
+    def testOffBuildsNothing(self):
+        cfg = Config(data_dir=self.tmp, regions=self.cfg.regions)
+        with mock.patch("datasvc.job.subprocess.run") as run:
+            self.assertFalse(job.build_routing(cfg))
+        run.assert_not_called()
 
 
 class TestBuildGol(JobCase):

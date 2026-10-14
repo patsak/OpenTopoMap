@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTM routing</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; }
+  #panel { position: absolute; z-index: 1000; top: 10px; right: 10px; width: 280px;
+           background: #fff; padding: 10px 12px; border-radius: 6px; box-shadow: 0 1px 6px #0004; }
+  #panel button { margin: 4px 4px 0 0; }
+  #summary { margin-top: 8px; white-space: pre-line; }
+  .legend span { display: inline-block; width: 22px; height: 0; border-top: 4px solid; vertical-align: middle; margin-right: 4px; }
+  .error { color: #b00; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <b>Маршрут</b> — кликайте по карте, точки идут по порядку.<br>
+  <label><input type="checkbox" id="offroad" checked> вне троп</label><br>
+  <label>рюкзак <input type="number" id="pack" value="0" min="0" max="40" step="1" style="width:4em"> кг</label><br>
+  <button id="go">Построить</button><button id="undo">Отменить точку</button><button id="clear">Сброс</button>
+  <div id="summary"></div>
+  <div class="legend">
+    <div><span style="border-color:#d00"></span>тропа</div>
+    <div><span style="border-color:#e80;border-top-style:dashed"></span>вне троп</div>
+    <div><span style="border-color:#06f"></span>брод</div>
+  </div>
+</div>
+<script>
+// A debugging page for the routing service: draw points, see the route the
+// graph gives, coloured by the kind of going.
+const map = L.map("map").setView([67.7, 33.7], 11);
+L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+  maxZoom: 17, attribution: "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)",
+}).addTo(map);
+
+const points = [];
+const markers = L.layerGroup().addTo(map);
+const routeLayer = L.layerGroup().addTo(map);
+const summary = document.getElementById("summary");
+
+fetch("api/v1/areas").then(r => r.json()).then(fc => {
+  const layer = L.geoJSON(fc, { style: { color: "#555", weight: 1, fill: false, dashArray: "4 4" } }).addTo(map);
+  if (fc.features.length) map.fitBounds(layer.getBounds());
+});
+
+function redrawMarkers() {
+  markers.clearLayers();
+  points.forEach((p, i) => L.marker([p[1], p[0]], { title: String(i + 1) })
+    .bindTooltip(String(i + 1), { permanent: true, direction: "top" }).addTo(markers));
+}
+
+map.on("click", e => { points.push([e.latlng.lng, e.latlng.lat]); redrawMarkers(); });
+document.getElementById("undo").onclick = () => { points.pop(); redrawMarkers(); };
+document.getElementById("clear").onclick = () => { points.length = 0; redrawMarkers(); routeLayer.clearLayers(); summary.textContent = ""; };
+
+const style = f => {
+  const g = f.properties.going;
+  if (g === "trail") return { color: "#d00", weight: 4 };
+  if (g === "ford") return { color: "#06f", weight: 6 };
+  return { color: "#e80", weight: 4, dashArray: "6 6" };
+};
+
+function hhmm(s) { const m = Math.round(s / 60); return `${Math.floor(m / 60)} ч ${m % 60} мин`; }
+
+document.getElementById("go").onclick = async () => {
+  if (points.length < 2) { summary.textContent = "нужно хотя бы две точки"; return; }
+  summary.textContent = "считаю…";
+  const body = {
+    type: "FeatureCollection",
+    properties: {
+      allow_offroad: document.getElementById("offroad").checked,
+      pack_kg: Number(document.getElementById("pack").value) || 0,
+    },
+    features: points.map(p => ({ type: "Feature", geometry: { type: "Point", coordinates: p }, properties: {} })),
+  };
+  const response = await fetch("api/v1/route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json();
+  routeLayer.clearLayers();
+  if (!response.ok) { summary.innerHTML = `<span class="error">${data.error}</span>`; return; }
+  const [whole, ...stretches] = data.features;
+  L.geoJSON({ type: "FeatureCollection", features: stretches }, {
+    style,
+    onEachFeature: (f, layer) => layer.bindTooltip(
+      `${f.properties.going}${f.properties.terrain ? " / " + f.properties.terrain : ""}: ` +
+      `${(f.properties.distance_m / 1000).toFixed(2)} км, ${hhmm(f.properties.duration_s)}`),
+  }).addTo(routeLayer);
+  const p = whole.properties;
+  summary.textContent =
+    `${(p.distance_m / 1000).toFixed(1)} км, ${hhmm(p.duration_s)}` +
+    (p.pack_kg ? ` с рюкзаком ${p.pack_kg} кг` : "") + "\n" +
+    `набор ${Math.round(p.ascent_m)} м, сброс ${Math.round(p.descent_m)} м\n` +
+    `вне троп ${(p.offroad_m / 1000).toFixed(1)} км`;
+};
+</script>
+</body>
+</html>

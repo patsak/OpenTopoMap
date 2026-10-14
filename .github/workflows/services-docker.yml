@@ -3,7 +3,7 @@ name: services docker
 on:
   push:
     branches: [master]
-    # www/** covers otmlib, which is baked into both images.
+    # www/** covers otmlib, which is baked into the images.
     paths:
       - "www/**"
       - "vector/tilemaker/**"
@@ -68,6 +68,7 @@ jobs:
           python -m pip install pytest gdal=="$(gdal-config --version)"
           python -m pip install -r www/mapsvc/requirements-server.txt
           python -m pip install -r www/datasvc/requirements.txt
+          python -m pip install -r www/routing/requirements.txt
 
       - name: Run tests
         working-directory: www
@@ -90,6 +91,8 @@ jobs:
             dockerfile: www/mapsvc/Dockerfile
           - service: datasvc
             dockerfile: www/datasvc/Dockerfile
+          - service: routing
+            dockerfile: www/routing/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

@@ -21,6 +21,13 @@ html, body {
   background: var(--bg);
 }
 
+/* Header, then the layout taking whatever height is left - however many
+   lines the header wraps to. */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
 .bar {
   display: flex;
   align-items: center;
@@ -115,14 +122,153 @@ html, body {
 .layout {
   display: grid;
   grid-template-columns: 1fr min(320px, 38vw);
-  height: calc(100% - 64px);
+  flex: 1;
+  min-height: 0;
+}
+
+/* The map, and under it the elevation profile of a planned route when there
+   is one: a column so the map gives up the strip's height instead of being
+   covered by it. */
+.map-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
 #map {
   position: relative;
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   background: #d7d2c8;
+}
+
+#map.route-mode { cursor: crosshair; }
+
+.profile {
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: 0.35rem 0.75rem 0.25rem;
+}
+
+.profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.going-legend {
+  display: flex;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.going-legend li { display: flex; align-items: center; gap: 0.35rem; }
+
+/* Line keys, drawn like the route on the map: off-trail dashed. */
+.going-legend .key {
+  display: inline-block;
+  width: 22px;
+  border-top: 4px solid var(--c);
+}
+
+.going-legend .key.offroad { border-top-style: dashed; }
+.going-legend .key.ford { border-top-width: 6px; }
+
+.profile-plot { position: relative; height: 150px; }
+.profile-plot svg { display: block; outline: none; }
+.profile-plot svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.profile-axis {
+  font-size: 11px;
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-tip {
+  position: absolute;
+  pointer-events: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.profile-tip strong { color: var(--ink); font-weight: 650; }
+
+/* Waypoints: numbered, draggable. */
+.route-pin span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #f7f4ee;
+  border: 2px solid #f7f4ee;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: grab;
+}
+
+.route-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.route-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.route-options label { display: flex; align-items: center; gap: 0.35rem; }
+
+.route-options select {
+  font: inherit;
+  color: var(--ink);
+  background: #efeae1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+}
+
+.passes-options { margin-bottom: 0.25rem; }
+
+.route-options input[type="number"] {
+  width: 4rem;
+  font: inherit;
+  color: var(--ink);
+  background: #efeae1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+}
+
+.route-summary { margin-top: 0.75rem; }
+
+/* The swatch matches AREA_STYLE in route.js. */
+.hint.routing-areas::before {
+  content: "";
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border: 1.5px dotted #6d4c9f;
 }
 
 .panel {
@@ -432,7 +578,6 @@ html, body {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: 55vh 1fr;
-    height: calc(100% - 96px);
   }
 
   .panel {
@@ -444,4 +589,6 @@ html, body {
     flex-direction: column;
     align-items: stretch;
   }
+
+  .profile-plot { height: 110px; }
 }

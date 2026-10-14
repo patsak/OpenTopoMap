@@ -1,8 +1,9 @@
 # OpenTopoMap data service: the region extracts and what is built from them.
 # Two entry points out of one image: the nightly job on a supercronic schedule
-# (the Geofabrik sync with osmium, then the Overpass GOL with gol), and the
-# preview worker (tilemaker) that renders one drawn bbox at a time - see the
-# datasvc-job and datasvc-preview services.
+# (the Geofabrik sync with osmium, then the Overpass GOL with gol, then the
+# hiking router's graphs with GRASS - www/routing), and the preview worker
+# (tilemaker) that renders one drawn bbox at a time - see the datasvc-job and
+# datasvc-preview services.
 
 # GeoDesk's gol tool, for the job's GOL step (otmlib.gol, read by
 # www/overpass). Compiled here rather than taken from the release: the released
@@ -55,10 +56,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 #   docker run --rm --entrypoint sh ghcr.io/systemed/tilemaker:master \
 #     -c "ldd /usr/src/app/tilemaker"
 # and add whatever it names.
+# grass-core, python3-gdal and python3-numpy are the routing graph build's:
+# r.watershed (GRASS 8.2 here - otmlib.grass handles it), the DEM reads, and
+# the numpy those GDAL bindings were built against.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         python3-venv \
+        python3-gdal \
+        python3-numpy \
+        grass-core \
         osmium-tool \
         gdal-bin \
         curl \
@@ -94,21 +101,37 @@ RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}" \
 WORKDIR /app
 
 COPY www/datasvc/requirements.txt /app/requirements.txt
+COPY www/routing/requirements.txt /app/routing-requirements.txt
+# The routing build's packages with numpy held at Debian's: a newer scipy or
+# numba would pull numpy 2 into the venv, and the GDAL bindings, built
+# against Debian's numpy, would fail to import.
 RUN python3 -m venv --system-site-packages /opt/otm-venv \
     && /opt/otm-venv/bin/pip install --no-cache-dir -U pip \
-    && /opt/otm-venv/bin/pip install --no-cache-dir -r /app/requirements.txt
+    && /opt/otm-venv/bin/pip install --no-cache-dir -r /app/requirements.txt \
+    && python3 -c "import numpy; print(f'numpy=={numpy.__version__}')" > /tmp/numpy-pin.txt \
+    && /opt/otm-venv/bin/pip install --no-cache-dir -c /tmp/numpy-pin.txt -r /app/routing-requirements.txt
 
 COPY www/datasvc /app/datasvc
 COPY www/otmlib /app/otmlib
+COPY www/routing /app/routing
 COPY vector/tilemaker /app/vector/tilemaker
 RUN cp /app/datasvc/crontab /app/crontab \
     && tilemaker --help > /dev/null \
-    && gol --version
+    && gol --version \
+    && grass --config python_path > /dev/null \
+    && /opt/otm-venv/bin/python -c "import osgeo.gdal, numba, scipy, routing.build.pipeline, routing.compile"
 
+# NUMBA_CPU_NAME=generic: numba compiles the routing build's loops for the
+# baseline of the architecture, not for what the host CPU claims. An Apple M4
+# under Colima lists SVE2 (from SME) that it does not run outside streaming
+# mode: compiled for the host, those loops die with "Illegal instruction".
 ENV PATH="/opt/otm-venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     OTM_DATA_DIR=/app/data \
     OTM_DATASVC_CONFIG=/app/datasvc/config.yaml \
+    OTM_ROUTING_CONFIG=/app/routing/config.yaml \
+    NUMBA_CACHE_DIR=/tmp/numba-cache \
+    NUMBA_CPU_NAME=generic \
     DATABASE_URL=postgresql://otm:otm@postgres:5432/otm
 
 CMD ["supercronic", "/app/crontab"]

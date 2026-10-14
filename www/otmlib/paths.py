@@ -17,6 +17,7 @@ DEM_CACHE_NAME = "dem-cache"
 
 PREVIEWS_NAME = "previews"
 GOL_DIR_NAME = "gol"
+ROUTING_DIR_NAME = "routing"
 
 
 def resolve_data_dir(fallback: Path) -> Path:
@@ -47,3 +48,9 @@ def gol(data_dir: Path) -> Path:
 def regions_gol(data_dir: Path) -> Path:
     """The one GOL merged out of every region datasvc syncs, whatever they are."""
     return gol(data_dir) / "regions.gol"
+
+
+def routing(data_dir: Path) -> Path:
+    """Routing graphs (www/routing): one ``<area>/`` directory per configured
+    mountain area, written by the routing build, read by the routing service."""
+    return data_dir / ROUTING_DIR_NAME

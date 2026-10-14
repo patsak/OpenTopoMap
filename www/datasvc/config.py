@@ -35,6 +35,9 @@ class Config:
     # Merge all the regions into one GOL after each sync (data/gol/regions.gol,
     # read by www/overpass). Off unless the config asks for it.
     gol: bool = False
+    # Build the hiking router's graphs after the sync and the GOL (www/routing,
+    # its own config.yaml). Off unless the config asks for it.
+    routing: bool = False
 
     @property
     def geofabrik_cache(self) -> Path:
@@ -72,8 +75,10 @@ def load(path: Path | None = None) -> Config:
     data_dir = Path(raw["data_dir"]) if raw.get("data_dir") else paths.resolve_data_dir(fallback)
     geofabrik_mirror = Path(raw["geofabrik_mirror"]) if raw.get("geofabrik_mirror") else None
 
-    gol = raw.get("gol", False)
-    if not isinstance(gol, bool):
-        raise ValueError(f"{source}: gol must be true or false, not {gol!r}")
+    flags = {}
+    for key in ("gol", "routing"):
+        flags[key] = raw.get(key, False)
+        if not isinstance(flags[key], bool):
+            raise ValueError(f"{source}: {key} must be true or false, not {flags[key]!r}")
 
-    return Config(data_dir=data_dir, regions=regions, geofabrik_mirror=geofabrik_mirror, gol=gol)
+    return Config(data_dir=data_dir, regions=regions, geofabrik_mirror=geofabrik_mirror, **flags)

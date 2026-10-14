@@ -49,6 +49,12 @@ class TestLoad(ConfigCase):
         with self.assertRaises(ValueError):
             config.load(self.write("regions: [georgia]\ngol: russia\n"))
 
+    def testRoutingIsAFlagOffByDefault(self):
+        self.assertFalse(config.load(self.write("regions: [georgia]\n")).routing)
+        self.assertTrue(config.load(self.write("regions: [georgia]\nrouting: true\n")).routing)
+        with self.assertRaises(ValueError):
+            config.load(self.write("regions: [georgia]\nrouting: caucasus\n"))
+
     def testRejectsAnEmptyRegionList(self):
         with self.assertRaises(ValueError):
             config.load(self.write("regions: []\n"))
