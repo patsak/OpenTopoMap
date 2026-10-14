@@ -1177,7 +1177,8 @@ function process_natural(poly_or_line)
 	local waterway_values = Set { "dam", "weir" }
 	-- hike: ridge/arete carry the relief crest line that the hypsometric tint alone
 	-- cannot show; they are the only members of this layer drawn below z12.
-	local natural_values = Set { "cliff", "crevasse", "ridge", "arete" }
+	-- Gorge reaches the natural line layer to use the same rock-face symbol as cliff.
+	local natural_values = Set { "cliff", "crevasse", "ridge", "arete", "gorge" }
 	local man_made_values = Set { "embankment", "dyke", "breakwater", "pier", "groyne" }
 	local barrier_values = Set { "ditch", "city_wall" }
 	
