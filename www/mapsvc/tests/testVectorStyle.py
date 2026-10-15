@@ -106,17 +106,46 @@ class TestGorgeLines(unittest.TestCase):
         self.layers = {layer["id"]: layer for layer in styleLayers()}
         self.lua = PROCESS_LUA.read_text(encoding="utf-8")
 
-    def testGorgesReachThePreviewAsCliffs(self):
+    def testLinearGorgesHaveTwoInwardFacingCliffs(self):
         natural_values = self.lua.split('local natural_values = Set {', 1)[1].split("}", 1)[0]
         self.assertIn('"gorge"', natural_values)
-        for layer_id in ("cliff", "cliff-teeth"):
+        layer_ids = ("gorge-wall-left", "gorge-wall-right", "gorge-teeth-left", "gorge-teeth-right")
+        for layer_id in layer_ids:
             layer = self.layers[layer_id]
             self.assertEqual(layer["source-layer"], "natural_lines")
             self.assertIn("gorge", json.dumps(layer["filter"]))
+        self.assertLess(self.layers["gorge-wall-left"]["paint"]["line-offset"][-1], 0)
+        self.assertGreater(self.layers["gorge-wall-right"]["paint"]["line-offset"][-1], 0)
+        self.assertLess(self.layers["gorge-teeth-left"]["paint"]["line-offset"][-1], 0)
+        self.assertGreater(self.layers["gorge-teeth-right"]["paint"]["line-offset"][-1], 0)
 
-    def testGarminUsesTheCliffTypeForGorges(self):
+    def testLinearGorgeLeavesThreeRiverWidthsBetweenTheCliffs(self):
+        left_wall = self.layers["gorge-wall-left"]["paint"]
+        right_wall = self.layers["gorge-wall-right"]["paint"]
+        low_zoom_gap = (
+            right_wall["line-offset"][4] - left_wall["line-offset"][4] - right_wall["line-width"][4]
+        )
+        self.assertAlmostEqual(low_zoom_gap, 5.4)
+
+        left = self.layers["gorge-teeth-left"]["paint"]
+        right = self.layers["gorge-teeth-right"]["paint"]
+        gap = right["line-offset"][-1] - left["line-offset"][-1] - right["line-width"][-1]
+        self.assertEqual(gap, 9)
+
+    def testPolygonGorgesRemainSingleCliffs(self):
+        for layer_id in ("gorge-polygon-cliff", "gorge-polygon-cliff-teeth"):
+            layer = self.layers[layer_id]
+            self.assertEqual(layer["source-layer"], "natural_polygons")
+            self.assertIn("gorge", json.dumps(layer["filter"]))
+
+    def testGarminDistinguishesLinearAndPolygonGorges(self):
         lines = (REPO / "garmin/style/opentopomap-hike/lines").read_text(encoding="utf-8")
-        self.assertIn("natural=cliff | natural=gorge [0x31 resolution 21]", lines)
+        self.assertIn("natural=gorge & is_closed()=false [0x37 resolution 21]", lines)
+        self.assertIn("natural=gorge & is_closed()=true [0x31 resolution 21]", lines)
+        typ = (REPO / "garmin/style/typ/opentopomap-hike.txt").read_text(encoding="utf-8")
+        gorge = typ.split("Type=0x37\n", 1)[1].split("[end]", 1)[0]
+        self.assertEqual(gorge.count('"################################"'), 2)
+        self.assertEqual(gorge.count('"                                "'), 9)
 
 
 class TestPeakAndSaddleLabels(unittest.TestCase):

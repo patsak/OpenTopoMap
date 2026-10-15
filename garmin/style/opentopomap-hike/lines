@@ -219,7 +219,9 @@ boundary=administrative [0x1c resolution 22]
 boundary=national [0x1e resolution 17]
 boundary=political [0x1c resolution 19]
 
-natural=cliff | natural=gorge [0x31 resolution 21]
+natural=cliff [0x31 resolution 21]
+natural=gorge & is_closed()=false [0x37 resolution 21]
+natural=gorge & is_closed()=true [0x31 resolution 21]
 # Crevasse ticks are drawn perpendicular to the host glacier's direction tag;
 # they share resolution 23 with the contours overlay so both appear together.
 crevasse=stripe2 [0x35 resolution 23]
