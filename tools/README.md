@@ -12,6 +12,7 @@ first.
 | [dem2rivers.py](dem2rivers.py) | River network from a DEM, with the Strahler hierarchy |
 | [lc2veg.py](lc2veg.py) | The same polygons for a bbox, cut out of a ready-made global land cover map |
 | [s2veg.py](s2veg.py) | Wood / dwarf pine / grass for a bbox, classified from this season's Sentinel-1 and -2 |
+| [westra2osm.py](westra2osm.py) | Passes of the Westra catalogue that OSM lacks, or has without `rtsa_scale` |
 
 [veglib.py](veglib.py) is not a tool either: it is what the two vegetation tools
 share - the class list, the working grid, the two global land cover maps and how
@@ -725,3 +726,80 @@ The same caveat as everywhere else in this directory, only more so: a kNN over
 eleven numbers is a drafting aid for `natural=wood` / `natural=scrub` /
 `natural=grassland`, not an import candidate. Classify the valley, then correct
 it by hand.
+
+westra2osm.py
+-------------
+
+Compares a region of the [Westra pass catalogue](https://westra.ru/passes/) with
+the passes OSM already has and writes an `.osm` file to open in JOSM, review and
+upload: grades and names for the passes OSM has without them, and the passes it
+does not have. Standard library plus the `osmium` command (`brew install
+osmium-tool`). OSM data comes from the extracts datasvc keeps current: the
+regions of `www/datasvc/config.yaml` in `geofabrik-cache/` of the data dir
+(`OTM_DATA_DIR`, else `www/mapsvc/data`), or the files given with `--pbf`.
+
+```bash
+./westra2osm.py --list                   # region ids: place=<id> in the site's links
+./westra2osm.py --place 65 -o altai.osm  # Altai
+./westra2osm.py --place 65 --place 384 --radius 150 --snap 50 -o passes.osm
+```
+
+For each region it downloads
+`classificator.php?place=<id>&type=new&export=kml` and keeps the passes (`пер.`;
+summits have no grade tag in OSM), except those with "траверс" in the name - a
+route over a summit, not a saddle. From each extract, `osmium tags-filter` keeps
+`mountain_pass=yes`, `natural=saddle` and `natural=ridge`/`arete` (2 s for the
+Siberian district) and `osmium extract` cuts the bbox of the passes; about 30 s
+for all eleven regions. A Westra pass matches an OSM one within
+`--radius` metres (200) when the names agree after dropping "пер."/"перевал",
+case, ё, hyphens and word order, with "№3" read as "N3" and Westra's "З.",
+"Вост.", "Б." read as
+"Западный", "Восточный", "Большой" and a fuzzy ratio for the remaining
+spelling. "Другие названия" from Westra and `alt_name`/`old_name`/... from OSM
+count too; "б/н" matches an unnamed OSM pass.
+
+An OSM object that already has `westra_ref`, or a link to the pass's page in
+`website`/`url`/`contact:website` (`https://westra.ru/passes/Passes/6748`), is
+that catalogue pass wherever it stands, before any name or distance is
+looked at; a summit with the number of a Westra traverse is found and left
+alone. One OSM pass is one Westra pass: a pass that carries another
+`westra_ref`, or that another Westra record already matched by name, means the
+catalogue lists that pass twice - the second record is dropped, not created
+next to it. Several Westra passes around one unnamed saddle (Туманный
+Зап./Центр./Сев.) leave it to the closest, and the rest count as missing.
+
+Every Westra pass becomes an edit:
+
+| case | edit |
+| --- | --- |
+| a name match within `--radius` | tags added to that OSM pass (`westra_ref` at least, if it has `rtsa_scale` already) |
+| an OSM pass of the same name `--radius`..1 km away | tags added to it: Westra coordinates are often a few hundred metres off |
+| no name match, an OSM pass of the same `rtsa_scale` closer than `--close` (40 m) | tags added to it: the same saddle whatever either calls it, so Westra's name goes to `alt_name` |
+| no name match, an unnamed OSM pass within `--radius` | tags added to it: the same saddle without its name |
+| nothing | a new node on the nearest `natural=ridge`/`arete` within `--snap` (100 m), as a new vertex of that way (or the untagged vertex it falls on); with no ridge that close, a loose node at the Westra point |
+
+The only tags ever written are `mountain_pass=yes`, `name`, `alt_name`, `ele`,
+`rtsa_scale` and `westra_ref` (the catalogue number), and an existing object
+gets only the ones it lacks. `alt_name` holds Westra's "Другие названия",
+`;`-separated as OSM expects, without heights, old list numbers ("№135"),
+guesses ("?") and descriptions ("в хр. ..."); for an existing pass that already
+has a name of its own, Westra's name goes there too, and a name OSM already
+has in any name tag is left out. Outside Russia these go to `name:ru` and
+`alt_name:ru`, so the local `name` stays. Russia is the Geofabrik polygon of it (`geofabrik-cache/index-v1.json`)
+minus Kazakhstan's exact border (built by osmium from its own extract;
+Kyrgyzstan's does not close in its extract, so its Geofabrik polygon stands in)
+and minus every other country's Geofabrik polygon - those overlap by a few km
+along a border, and a point in both counts as abroad. A pass
+no extract covers (deep in Mongolia, China, Georgia) is dropped: with no OSM to
+compare against it would only make a duplicate. An existing object that has
+all of them already is left out. Names lose
+"пер." and get the abbreviations spelled out ("Айташ З." becomes "Айташ
+Западный"); a bare height ("пер. 2460") is no name.
+
+Geofabrik extracts keep object versions, which is what JOSM needs to upload a
+modified object. The extracts are up to a day behind OSM: an object someone
+changed since then comes up as a conflict in JOSM on upload, not as a lost
+edit. The run prints how each pass ended up.
+
+Westra coordinates are rough and the nearest point of a ridge is not its lowest
+point, so look through the layer in JOSM before uploading.
