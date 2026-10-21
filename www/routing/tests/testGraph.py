@@ -517,3 +517,42 @@ class TestPassLimits(GraphCase):
     def testPassNamesSurviveCompiling(self):
         graph = self.engine.graph
         self.assertEqual(graph.meta["pass_names"][int(np.flatnonzero(graph.pass_osm == 2)[0])], "Easy")
+
+
+class TestTrailPassLimit(GraphCase):
+    """A trail does not waive the category of the pass it crosses."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = ta.config(Path(tempfile.mkdtemp()))
+        trail = ta.osm_way(
+            100, 10,
+            [WEST, ta.XC, EAST],
+            [ta.YC, ta.YC, ta.YC],
+            highway="path",
+        )
+        osm = OsmData(
+            routable=[trail],
+            passes=[
+                ta.osm_point(11, ta.XC, ta.YC, name="Trail pass", rtsa_scale="1Б"),
+                ta.osm_point(2, ta.XC, ta.YC + 1200, name="Easy", rtsa_scale="1А"),
+            ],
+        )
+        pkg, _ = ta.build(cls.cfg, two_saddles(), osm)
+        cls.engine = ta.engine(pkg)
+        lon, lat = ta.lonlat([WEST, EAST], [ta.YC, ta.YC])
+        cls.points = list(zip(lon.tolist(), lat.tolist()))
+
+    def setUp(self):
+        pass
+
+    def crossed(self, grade: str | None = None):
+        options = Options(max_pass_grade=model.pass_grade(grade)) if grade else Options()
+        path = self.engine.route(self.points, options)
+        return [self.engine.graph.pass_osm[i] for i in path.passes]
+
+    def testTrailUsesItsPassWithoutALimit(self):
+        self.assertEqual(self.crossed(), [11])
+
+    def testTrailThrough1BIsClosedAt1A(self):
+        self.assertEqual(self.crossed("1А"), [2])

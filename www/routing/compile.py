@@ -197,7 +197,33 @@ def compile_graph(cfg: routing_config.Config, name: str) -> Path:
     key = key[eperm]
     firsts = np.r_[True, key[1:] != key[:-1]]
     del key
-    sel = np.sort(kept[eperm[firsts]])
+    ordered = kept[eperm]
+    representatives = ordered[firsts]
+
+    # An OSM edge in the overlap can occur in one tile which sees the pass
+    # point and in another whose OSM margin sees the way but not the point.
+    # Keep pass metadata from any duplicate, not only from the copy selected
+    # for its on-DEM cost. Otherwise the compiled trail can lose its category.
+    groups = np.cumsum(firsts) - 1
+    all_epass, all_ecross = global_pass("edge_pass"), global_pass("edge_cross")
+
+    def duplicate_pass(values: np.ndarray) -> np.ndarray:
+        merged = np.full(len(representatives), -1, dtype=np.int32)
+        valid = values[ordered] >= 0
+        vg = groups[valid]
+        vv = values[ordered[valid]]
+        if len(vg):
+            first_valid = np.r_[True, vg[1:] != vg[:-1]]
+            merged[vg[first_valid]] = vv[first_valid]
+        out = np.full(len(values), -1, dtype=np.int32)
+        out[representatives] = merged
+        return out
+
+    merged_epass = duplicate_pass(all_epass)
+    merged_ecross = duplicate_pass(all_ecross)
+    del all_epass, all_ecross, groups, ordered
+    sel = np.sort(representatives)
+    del representatives
     total = len(swap)
     del kept, eperm, firsts
     # an edge closed both ways is no edge
@@ -223,7 +249,8 @@ def compile_graph(cfg: routing_config.Config, name: str) -> Path:
     E = len(sel)
     if E * 2 >= 2 ** 31:
         raise RuntimeError(f"{name}: too many edges for 32-bit ids")
-    epass, ecross = global_pass("edge_pass")[sel], global_pass("edge_cross")[sel]
+    epass, ecross = merged_epass[sel], merged_ecross[sel]
+    del merged_epass, merged_ecross
 
     def both(fwd: str, bwd: str) -> tuple[np.ndarray, np.ndarray]:
         """A per-direction field pair of the kept edges, low -> high node first."""

@@ -37,4 +37,4 @@ EXPOSE 8080
 
 # One worker: the graphs are memory-mapped, so threads share the pages; the
 # disk engine's A* releases the GIL (numba nogil), so they search in parallel.
-CMD ["sh", "-c", "exec gunicorn --chdir /app --bind 0.0.0.0:8080 --workers 1 --threads ${OTM_ROUTING_THREADS:-4} --timeout 120 --access-logfile - --error-logfile - 'routing.server:create_app()'"]
+CMD ["sh", "-c", "exec gunicorn --chdir /app --bind 0.0.0.0:8080 --workers 1 --threads ${OTM_ROUTING_THREADS:-4} --timeout ${OTM_ROUTING_TIMEOUT:-300} --access-logfile - --error-logfile - 'routing.server:create_app()'"]

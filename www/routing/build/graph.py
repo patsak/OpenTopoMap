@@ -249,6 +249,7 @@ class GraphBuilder:
         self.pass_zone = None
         self.zone_sectors: list = []
         self.pass_table: list[dict] = []
+        self.ridge_divides: list[LineString] = []
         # thalweg centre lines after optional OSM alignment (index -> xy)
         self.chain_polylines: dict[int, np.ndarray] = {}
 
@@ -334,13 +335,14 @@ class GraphBuilder:
         return out
 
     def _cross_pass(self, graph: Graph) -> np.ndarray:
-        """Edges that cross a pass or evade it over the nearby high ridge.
+        """Edges that cross a pass or evade it over the nearby ridge.
 
         The small apex catches the edge through the saddle itself, whatever
-        kind and however gentle. The larger bypass cap catches edges at or
-        above the saddle: otherwise ruling out a 2A pass can make A* walk over
-        a 4500 m summit 700 m away. The nearest pass owns an edge where caps
-        overlap, so a nearby easier saddle remains usable.
+        kind and however gentle. The associated DEM divide catches crossings
+        of the same ridge nearby even where the DEM puts them just below the
+        saddle. A height cap is the fallback where the coarse divide misses
+        the crest. The nearest pass owns an edge where areas overlap, so a
+        nearby easier saddle remains usable.
         """
         out = np.full(len(graph.edge_u), -1, dtype=np.int32)
         if not self.pass_table:
@@ -354,6 +356,33 @@ class GraphBuilder:
             dist = shapely.distance(lines[hit_edge], points[hit_pass])
             order = np.argsort(-dist, kind="stable")  # nearest last, so it wins
             out[hit_edge[order]] = hit_pass[order]
+
+        # A category belongs to the neighbouring stretch of the same ridge,
+        # not only to the mapped saddle point. Select divides which run through
+        # the apex, clip them to the bypass radius and thicken by one DEM cell
+        # because the graph's walkable ridge is a simplified copy.
+        if self.ridge_divides:
+            divides = np.asarray(self.ridge_divides, dtype=object)
+            attach = shapely.buffer(points, g.pass_zone_apex_m / 2 + APEX_SLACK_M)
+            hit_pass, hit_divide = STRtree(divides).query(attach, predicate="intersects")
+            gates, owners = [], []
+            circles = shapely.buffer(points, g.pass_bypass_radius_m)
+            for p, d in zip(hit_pass.tolist(), hit_divide.tolist()):
+                piece = shapely.intersection(divides[d], circles[p])
+                if not piece.is_empty:
+                    gates.append(piece.buffer(self.grid.res, cap_style="flat"))
+                    owners.append(p)
+            if gates:
+                gate_edge, gate_i = STRtree(np.asarray(gates, dtype=object)).query(
+                    lines, predicate="intersects",
+                )
+                if gate_edge.size:
+                    gate_pass = np.asarray(owners, dtype=np.int32)[gate_i]
+                    free = out[gate_edge] < 0
+                    gate_edge, gate_pass = gate_edge[free], gate_pass[free]
+                    dist = shapely.distance(lines[gate_edge], points[gate_pass])
+                    order = np.argsort(-dist, kind="stable")
+                    out[gate_edge[order]] = gate_pass[order]
 
         # One representative height per edge. Edges are short (the off-trail
         # lines are cut to their configured spacing); taking endpoints and the
@@ -381,7 +410,7 @@ class GraphBuilder:
                 dist = shapely.distance(lines[cap_edge], points[cap_pass])
                 order = np.argsort(-dist, kind="stable")
                 out[cap_edge[order]] = cap_pass[order]
-        log.info("pass crossings and high bypasses: %s edges near %s passes",
+        log.info("pass crossings and ridge bypasses: %s edges near %s passes",
                  int((out >= 0).sum()), len(np.unique(out[out >= 0])))
         return out
 
@@ -977,6 +1006,10 @@ class GraphBuilder:
             labels = hydrology.basin_labels(self.hyd.accum_km2, self.down, g.ridge_catchment_km2)
             labels[water] = -1
             raw = hydrology.divide_lines(labels, self.grid)
+        self.ridge_divides = [
+            LineString(xy) for xy in raw
+            if len(xy) >= 2 and self.in_box(xy[:, 0], xy[:, 1]).any()
+        ]
         tolerance = 0.75 * self.grid.res
         node_at: dict[tuple[float, float], int] = {}
         lines, us, vs, all_nodes = [], [], [], []

@@ -113,7 +113,13 @@
     let route = null; // the last answer, GeoJSON
     let series = null; // its profile
     let timer = null;
-    let inflight = null;
+    // Aborting fetch only closes the browser connection: the routing worker
+    // keeps running A*. Sending a request for every added point therefore
+    // fills all four worker threads with abandoned searches on large graphs.
+    // Keep one request in flight and coalesce every change into one reroute.
+    let inflight = false;
+    let pending = false;
+    let requestSeq = 0;
     let api = "/route/api/v1";
 
     return {
@@ -203,6 +209,8 @@
       },
 
       clearRoute() {
+        requestSeq += 1; // an answer already being computed is now stale
+        pending = false;
         this.routePoints = [];
         this.redrawMarkers();
         this.showRoute(null);
@@ -228,18 +236,22 @@
         this.scheduleRoute(0);
       },
 
-      scheduleRoute(delay = 250) {
+      scheduleRoute(delay = 1000) {
         clearTimeout(timer);
         timer = setTimeout(() => this.buildRoute(), delay);
       },
 
       async buildRoute() {
+        const seq = ++requestSeq;
         if (this.routePoints.length < 2) {
           this.showRoute(null);
           return;
         }
-        if (inflight) inflight.abort();
-        inflight = new AbortController();
+        if (inflight) {
+          pending = true;
+          return;
+        }
+        inflight = true;
         const pack = Math.max(0, Number(this.routePack) || 0);
         const body = {
           type: "FeatureCollection",
@@ -258,15 +270,21 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-            signal: inflight.signal,
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-          this.showRoute(data);
-          this.setRouteStatus("done", "");
+          if (seq === requestSeq) {
+            this.showRoute(data);
+            this.setRouteStatus("done", "");
+          }
         } catch (err) {
-          if (err.name === "AbortError") return;
-          this.setRouteStatus("error", String(err.message || err));
+          if (seq === requestSeq) this.setRouteStatus("error", String(err.message || err));
+        } finally {
+          inflight = false;
+          if (pending) {
+            pending = false;
+            this.buildRoute();
+          }
         }
       },
 

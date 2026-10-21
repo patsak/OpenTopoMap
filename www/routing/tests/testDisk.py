@@ -160,6 +160,41 @@ class TestTilesMerge(unittest.TestCase):
         self.assertEqual(len(graph.pass_osm), 1)
         self.assertTrue((np.asarray(graph.pass_need) == 0).any())
 
+    def testDuplicateTrailKeepsPassFromEitherTile(self):
+        tmp = Path(tempfile.mkdtemp())
+        base = ta.config(tmp)
+        names = ("r-00-00", "r-00-01")
+        tiles = tuple(Area(name, ta.bbox(), region="r", debug=False) for name in names)
+        cfg = dataclasses.replace(base, areas=tiles, regions=(Area("r", ta.bbox(), tile_km=10),))
+        trail = ta.osm_way(
+            100, 10,
+            [WEST, ta.XC, EAST],
+            [ta.YC, ta.YC, ta.YC],
+            highway="path",
+        )
+        osm = OsmData(
+            routable=[trail],
+            passes=[ta.osm_point(11, ta.XC, ta.YC, name="Trail pass", rtsa_scale="1Б")],
+        )
+        # The first duplicate is the one compile normally keeps. Simulate a
+        # neighbouring tile which saw the way through its margin but not the
+        # pass point; the other copy still has the correct pass metadata.
+        first, _ = ta.build(cfg, ta.two_valleys(), osm, name=names[0])
+        on_trail = first.edge_kind == model.OSM
+        first.edge_pass[on_trail] = -1
+        first.edge_cross[on_trail] = -1
+        second, _ = ta.build(cfg, ta.two_valleys(), osm, name=names[1])
+        ta.write(cfg, first, names[0], compile_it=False)
+        ta.write(cfg, second, names[1], compile_it=False)
+
+        routing_compile.compile_graph(cfg, "r")
+        graph = DiskGraph(routing_compile.graphs_dir(cfg) / "r")
+        [p] = np.flatnonzero(np.asarray(graph.pass_osm) == 11)
+        arcs = np.asarray(graph.pass_arc)
+        needs = np.asarray(graph.pass_need)
+        kinds = np.asarray(graph.arc_kind)[arcs] & 0x7F
+        self.assertTrue(((needs == p) & (kinds == model.OSM)).any())
+
 
 if __name__ == "__main__":
     unittest.main()
