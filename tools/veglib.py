@@ -2,10 +2,12 @@
 """What s2veg.py and lc2veg.py share: the class list, the ready-made global land
 cover maps, and the way a class raster is turned into polygons.
 
-It is not a tool. The two that are - one classifies a Sentinel-2 scene, the other
-just cuts a global map to a bbox - have to agree on what "wood" means, on how a
-speckled raster is cleaned up, and on what the output file looks like, so that
-part lives here instead of in both of them.
+It is not a tool. The ones that are - s2veg.py classifies a Sentinel scene,
+lc2veg.py cuts a global map to a bbox, s2rock.py splits bare ground into
+bedrock and scree (talus or a moraine ridge) - have to agree on what "wood"
+means, on how a speckled raster is cleaned up, and on what the output file
+looks like, so that part lives here
+instead of in each of them.
 
 The global maps are read as data, not as pictures. Both are published as class
 rasters, and both are reachable without an account:
@@ -49,14 +51,17 @@ OGR_DRIVERS = {
 }
 RASTER_SUFFIXES = (".tif", ".tiff")
 
+# bare_rock and scree are the split of bare. The global maps do not have it -
+# both surfaces arrive as bare - so only s2rock.py ever writes these two.
 CLASSES = {"nodata": 0, "water": 1, "bare": 2, "grass": 3, "scrub": 4, "wood": 5,
-           "wetland": 6, "moss": 7}
+           "wetland": 6, "moss": 7, "bare_rock": 8, "scree": 9}
 NAMES = {code: name for name, code in CLASSES.items()}
 VEGETATION = ("grass", "scrub", "wood", "wetland", "moss")
 COLORS = {
     0: (0, 0, 0, 0), 1: (70, 130, 180, 255), 2: (200, 190, 170, 255),
     3: (196, 222, 122, 255), 4: (150, 195, 110, 255), 5: (40, 120, 60, 255),
     6: (140, 195, 190, 255), 7: (250, 230, 160, 255),
+    8: (110, 105, 100, 255), 9: (190, 175, 150, 255),
 }
 # What a traced polygon is tagged with in OSM, printed at the end of a run.
 # moss is the lichen and moss ground above the treeline, which vector/tilemaker
@@ -66,6 +71,7 @@ OSM_TAGS = {
     "wood": "natural=wood", "scrub": "natural=scrub", "grass": "natural=grassland",
     "wetland": "natural=wetland", "water": "natural=water",
     "bare": "natural=bare_rock / scree", "moss": "natural=fell / tundra",
+    "bare_rock": "natural=bare_rock", "scree": "natural=scree",
 }
 
 # Both products tile the world in 3-degree squares named after their SW corner,
@@ -369,10 +375,109 @@ def polygonize(labels: np.ndarray, reference: gdal.Dataset, wanted: list[str], a
     return raw
 
 
+def polygon_parts(geometry: ogr.Geometry) -> list[ogr.Geometry]:
+    kind = ogr.GT_Flatten(geometry.GetGeometryType())
+    if kind == ogr.wkbPolygon:
+        return [geometry]
+    if kind in (ogr.wkbMultiPolygon, ogr.wkbGeometryCollection):
+        return [part for i in range(geometry.GetGeometryCount())
+                for part in polygon_parts(geometry.GetGeometryRef(i))]
+    return []
+
+
+def valid_polygons(geometry: ogr.Geometry) -> ogr.Geometry | None:
+    """geometry as a valid MultiPolygon, None when nothing areal survives repair."""
+    gdal.PushErrorHandler("CPLQuietErrorHandler")   # IsValid says why, at length
+    valid = geometry.IsValid()
+    gdal.PopErrorHandler()
+    if valid:
+        return ogr.ForceToMultiPolygon(geometry)
+    repaired = geometry.MakeValid()
+    parts = polygon_parts(repaired) if repaired is not None else []
+    if not parts:
+        return None
+    polygons = ogr.Geometry(ogr.wkbMultiPolygon)
+    for part in parts:
+        polygons.AddGeometry(part)
+    return polygons
+
+
+def valid_coverage(raw: Path, args) -> tuple[Path, int, int]:
+    """The polygons over --min-area, repaired, with their pixel area kept aside.
+
+    Two pixels meeting at a corner give 8-connected polygonize a ring that
+    touches itself, which is not a valid polygon anywhere downstream. MakeValid
+    splits it at that corner without moving a vertex, so neighbours still share
+    their edges.
+    """
+    source = ogr.Open(str(raw))
+    layer = source.GetLayer(0)
+    coverage = args.work / "coverage.gpkg"
+    coverage.unlink(missing_ok=True)
+    sink = ogr.GetDriverByName("GPKG").CreateDataSource(str(coverage))
+    out_layer = sink.CreateLayer("coverage", srs=layer.GetSpatialRef(), geom_type=ogr.wkbMultiPolygon)
+    out_layer.CreateField(ogr.FieldDefn("code", ogr.OFTInteger))
+    out_layer.CreateField(ogr.FieldDefn("area", ogr.OFTReal))
+
+    min_area = args.min_area * 10000.0
+    dropped, invalid = 0, 0
+    out_layer.StartTransaction()
+    for feature in layer:
+        geometry = feature.GetGeometryRef()
+        area = geometry.GetArea()
+        if area < min_area:
+            dropped += 1
+            continue
+        geometry = valid_polygons(geometry)
+        if geometry is None:
+            invalid += 1
+            continue
+        out_feature = ogr.Feature(out_layer.GetLayerDefn())
+        out_feature.SetGeometry(geometry)
+        out_feature.SetField("code", feature.GetField("code"))
+        out_feature.SetField("area", area)
+        out_layer.CreateFeature(out_feature)
+    out_layer.CommitTransaction()
+    del sink
+    return coverage, dropped, invalid
+
+
+def share_edges(coverage: Path, tolerance: float, work: Path) -> Path | None:
+    """Node the coverage and simplify every shared edge once, for both polygons on
+    it; None without GDAL 3.12 and GEOS 3.14.
+
+    Simplified polygon by polygon, the two copies of a shared edge drift apart
+    and neighbours gap and overlap. GEOS simplifies edges, not polygons, but only
+    when neighbours share every vertex, and polygonize does not give that: where
+    B and C meet on a straight side of A, A has no vertex. clean-coverage with no
+    gap width adds the missing nodes and moves nothing.
+    """
+    noded = work / "noded.gpkg"
+    simplified = work / "simplified.gpkg"
+    try:
+        with gdal.Run("vector", "clean-coverage", input=str(coverage), output=str(noded),
+                      overwrite=True):
+            pass
+        if tolerance <= 0:
+            return noded
+        with gdal.Run("vector", "simplify-coverage", input=str(noded), output=str(simplified),
+                      tolerance=tolerance, overwrite=True):
+            pass
+    except (AttributeError, RuntimeError) as error:
+        if tolerance > 0:
+            log(f"! no coverage simplification here ({error}): simplifying polygon by "
+                "polygon, so neighbours may gap or overlap - it needs GDAL 3.12 and GEOS 3.14")
+        return None
+    return simplified
+
+
 def write_vector(raw: Path, output: Path, layer_name: str, args) -> None:
     """Filter by area, simplify, reproject and write the file the user asked for."""
     driver_name = OGR_DRIVERS[output.suffix.lower()]
-    source = ogr.Open(str(raw))
+    coverage, dropped, invalid = valid_coverage(raw, args)
+    shared = share_edges(coverage, args.simplify, args.work)
+    coverage, per_polygon = (shared, 0.0) if shared else (coverage, args.simplify)
+    source = ogr.Open(str(coverage))
     layer = source.GetLayer(0)
     srs = layer.GetSpatialRef()
     target_srs = osr.SpatialReference()
@@ -391,30 +496,22 @@ def write_vector(raw: Path, output: Path, layer_name: str, args) -> None:
     area_field.SetPrecision(3)
     out_layer.CreateField(area_field)
 
-    min_area = args.min_area * 10000.0
-    kept, dropped, invalid, area_by_class = 0, 0, 0, {}
+    kept, area_by_class = 0, {}
     out_layer.StartTransaction()
     for feature in layer:
         geometry = feature.GetGeometryRef()
-        area = geometry.GetArea()
-        if area < min_area:
-            dropped += 1
-            continue
-        if args.simplify > 0:
-            geometry = geometry.SimplifyPreserveTopology(args.simplify)
-        # Two pixels meeting at a corner give 8-connected polygonize a ring that
-        # touches itself, which is not a valid polygon anywhere downstream.
-        gdal.PushErrorHandler("CPLQuietErrorHandler")   # IsValid says why, at length
-        valid_geometry = geometry.IsValid()
-        gdal.PopErrorHandler()
-        geometry = geometry if valid_geometry else geometry.MakeValid()
-        if geometry is None:
-            invalid += 1
-            continue
-        geometry = ogr.ForceToMultiPolygon(geometry)
+        area = feature.GetField("area")
+        if per_polygon > 0:
+            geometry = geometry.SimplifyPreserveTopology(per_polygon)
         if transform is not None:
             geometry = geometry.Clone()
             geometry.Transform(transform)
+        # Reprojecting can bring a ring close enough to itself to be invalid;
+        # repairing it is the one way a shared edge can still lose its twin.
+        geometry = valid_polygons(geometry)
+        if geometry is None:
+            invalid += 1
+            continue
         name = NAMES[feature.GetField("code")]
         out_feature = ogr.Feature(out_layer.GetLayerDefn())
         out_feature.SetGeometry(geometry)
@@ -446,7 +543,7 @@ def validate_output(output: Path) -> None:
 
 
 def parse_classes(value: str) -> list[str]:
-    wanted = (list(VEGETATION) + ["water", "bare"] if value == "all"
+    wanted = (list(VEGETATION) + ["water", "bare", "bare_rock", "scree"] if value == "all"
               else [name.strip() for name in value.split(",") if name.strip()])
     unknown = [name for name in wanted if name not in CLASSES or name == "nodata"]
     if unknown:

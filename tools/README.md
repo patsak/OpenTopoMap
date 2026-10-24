@@ -12,9 +12,10 @@ first.
 | [dem2rivers.py](dem2rivers.py) | River network from a DEM, with the Strahler hierarchy |
 | [lc2veg.py](lc2veg.py) | The same polygons for a bbox, cut out of a ready-made global land cover map |
 | [s2veg.py](s2veg.py) | Wood / dwarf pine / grass for a bbox, classified from this season's Sentinel-1 and -2 |
+| [s2rock.py](s2rock.py) | Bare rock and scree for a bbox, split from one summer of Sentinel-1 and -2 |
 | [westra2osm.py](westra2osm.py) | Passes of the Westra catalogue that OSM lacks, or has without `rtsa_scale` |
 
-[veglib.py](veglib.py) is not a tool either: it is what the two vegetation tools
+[veglib.py](veglib.py) is not a tool either: it is what the land-cover tools
 share - the class list, the working grid, the two global land cover maps and how
 they are fetched, and the way a class raster becomes polygons.
 
@@ -24,9 +25,9 @@ output), so they cannot drift apart on the parts that are supposed to match.
 
 Requirements: Python 3 with GDAL bindings (`osgeo`) — the same ones `www/otmlib`
 uses — and, for the DEM tools, GRASS GIS 8. `dem2rivers.py` also needs the
-`r.stream.order` addon, which is a one-time install. `s2veg.py` additionally
-needs `pystac-client` and `scikit-learn` from `requirements.txt`, and a free
-Copernicus account for the imagery (see its section below).
+`r.stream.order` addon, which is a one-time install. `s2veg.py` and `s2rock.py`
+additionally need `pystac-client` and `scikit-learn` from `requirements.txt`,
+and a free Copernicus account for the imagery (see the s2veg section below).
 
 ```bash
 brew install gdal
@@ -268,7 +269,9 @@ everything but `wetland` by default, `all` adds it:
 `moss` and `bare` are deliberately not merged: above the treeline a lichen-covered
 slope and a scree field look alike from below but are different surfaces, and
 `vector/tilemaker/process-otm.lua` already styles `natural=fell` apart from
-`natural=scree`. Watch out for the numbering when reading the sources directly —
+`natural=scree`. Splitting `bare` into bedrock and scree — a talus or a
+moraine ridge, including one far from any cliff — is
+[s2rock.py](s2rock.py), not a second pass of this one. Watch out for the numbering when reading the sources directly —
 LCFM calls moss 70 and bare 80, WorldCover calls bare 60 and moss 100. Built-up,
 snow and unclassifiable have no class here and are dropped.
 
@@ -296,6 +299,18 @@ The same data is available as data:
 
 Both are tiled in 3° squares named after their south-west corner (`N54E114`), and
 a bbox that straddles a tile edge simply fetches both.
+
+### Shared edges
+
+Neighbouring polygons come out as a coverage: no gaps, no overlaps, and every
+border between two of them is one line with the same vertices on both sides, so
+QGIS overlays (difference, symmetrical difference, dissolve) take the file as it
+is. `--simplify` is applied to those shared edges rather than polygon by polygon -
+simplifying each polygon on its own moves the two copies of a border apart, and
+at the default 1.5 cells that left slivers up to 15 m wide between rock and
+scree. This needs GDAL 3.12 with GEOS 3.14 (`gdal vector clean-coverage` and
+`simplify-coverage`); with older ones the tools say so and fall back to the
+polygon-by-polygon simplification.
 
 s2veg.py
 --------
@@ -726,6 +741,112 @@ The same caveat as everywhere else in this directory, only more so: a kNN over
 eleven numbers is a drafting aid for `natural=wood` / `natural=scrub` /
 `natural=grassland`, not an import candidate. Classify the valley, then correct
 it by hand.
+
+s2rock.py
+---------
+
+Bare rock and scree, for a bbox. Same fetch, same grid, same kNN and k-means as
+`s2veg.py`. The feature vector is the part that changes, because the question
+is a different one: the global maps already know where the bare ground is and
+have a single class for it, and what they cannot do is tell bedrock from loose
+debris. Debris is one class: the talus under a wall and a moraine ridge, which
+is the same cover and can lie far from any cliff.
+
+```bash
+./s2rock.py --bbox 114.0 56.20 114.2 56.35 --year 2025 --dry-run
+./s2rock.py --bbox 114.0 56.20 114.2 56.35 --year 2025 \
+            --features stack.tif --cluster-raster ids.tif -o rock.gpkg
+./s2rock.py --bbox 114.0 56.20 114.2 56.35 --features-in stack.tif \
+            --name 2=scree,3=bare_rock -o rock.gpkg
+./s2rock.py --bbox 114.0 56.20 114.2 56.35 --labels lcfm,train.gpkg \
+            --method knn -o rock.gpkg
+./s2rock.py --bbox 42.88 43.01 43.13 43.22 --year 2025 --summer 08-23:08-31 \
+            --sar-months 08-01:08-31 --scenes 2 --dem ../www/mapsvc/data/dem-cache/hgt \
+            --labels worldcover,train.gpkg --method knn --within bare,moss -o rock.gpkg
+```
+
+One summer window, on purpose. Rock and scree do not green up, senesce, or
+disappear under snow while something else does not, which is the only reason
+`s2veg.py` fetches a spring composite at all. A second season here would be a
+second copy of the summer one, and both classifiers measure plain distance, so
+it would count twice. There is no `--spring`.
+
+What differs at 10 m is the surface, not where the debris lies. A clay, iron or
+carbonate index sees lithology, which bedrock and the debris worn from it share,
+and `B12` is not fetched either: on the Kodar run it was already `B11` (r=+0.94).
+Distance to the nearest cliff is not a feature either. A moraine ridge is scree
+and can sit in the valley.
+
+| Feature | In the distance | What it is for |
+| --- | --- | --- |
+| `B02` `B04` `B08`/`B8A` `B11` | fetched, written to `--features`, left out unless `--parents` | parents of the indices and of the texture. In the distance, after standardizing, they split sun from shade, and shaded bedrock and shaded debris are the same shadow |
+| `NDVI` | yes | both sit low. Inside `bare` it is what still pulls lichen and sparse grass, which the map calls bare, away from the two surfaces. It does not tell those two apart |
+| `BSI` | yes | `((B11 + red) − (NIR + blue)) / ((B11 + red) + (NIR + blue))`, the SWIR side of the same gate. When the redundancy line says it has collapsed into `NDVI`, `--drop BSI` |
+| `VV_db` | yes | C-band roughness. Loose debris, a talus or a moraine ridge, is clasts far larger than the 5 cm wavelength and scatters brightly wherever it sits. A rock face is specular: dark unless it faces the radar |
+| `VH_db` | in the stack, out of the distance | beside `VV_db` and `VH_VV` it is the same scattering a second time |
+| `VH_VV` | yes, linear | both bare surfaces depolarize weakly — scree on the Kodar run sat near −9.6 dB, forest near −6 — so a dwarf-pine mat the map called bare does not join either class. A mat and bare rock depolarize alike, the same limit `s2veg.py` already measured, so the ratio is not the split |
+| `B04_sd` | yes, 3×3 window | the optical half of the split. Bedrock at 10 m is an edge, bright face against shadow, so the window is uneven. Scree — talus or moraine — is stones smaller than the pixel, so the same window is flat, including a ridge far from any wall. The near infrared is not taken as well: hillshade drives it the same way |
+| `VV_sd` | yes, same window | the SAR half. A monthly mosaic blends look directions, so the mean backscatter of a facet is a muddle, but the muddle is spatially uneven on bedrock and even on a debris surface |
+| `slope` | yes, degrees; `--no-slope` drops it | from the DEM — `--dem` file or tile directory, GEDTM 30 m by default — warped cubic to the 10 m grid. A face is steep and a talus lies near the angle of repose, and on the shaded side, where reflectance and texture go flat, slope is what does not change with the sun. One dimension of seven, not a threshold: gentle moraine has to be among the scree polygons, or kNN learns that scree is steep. A cliff narrower than 30 m reads less steep than it is |
+
+Coherence is not a feature. Both surfaces are stable, and it would mean SLC
+pairs instead of the L3 mosaics `s2veg.py` uses precisely to avoid a
+terrain-correction job. `--flatten-sar` is not offered either: that correction
+exists so vegetation is not sorted by aspect, and here the aspect dependence of
+a facet is the cliff. The ratio barely moves under it anyway.
+
+Elevation is a column in the cluster table and not a feature, the same rule as
+in `s2veg.py`. Slope is a feature but never a rule: a talus under a wall sits
+near the angle of repose, a moraine ridge is the same class on gentle ground
+far from it, and a threshold would keep one and drop the other.
+
+**Shaded slopes.** The scene classification marks a slope facing away from the
+sun as dark area (SCL 2), and `s2veg.py` drops it with the clouds. On a clear
+August day over Bezengi that was 86–95 % of the bare ground lit at cos(i) under
+0.25: the shaded side was not misclassified, it was missing. `s2rock.py` keeps
+SCL 2. `--mask-shadow` drops it again for a cloudy window, where dark area can
+also be cloud shadow the mask missed.
+
+**Where the split is asked for.** No global map has it, so the default is
+k-means inside the map's `bare` (`--within bare`), with `--clusters 4` so sun,
+shade and the vegetated leftover have room to fall out on their own. The vote
+then names every cluster `bare`, and with `--scree map` all of it comes out as
+scree until a rock cluster is named. `--name 2=scree,3=bare_rock` is the split,
+read off the table: scree is the low `B04_sd` and `VV_sd` with high `VV_db`,
+rock is the high deviations. That reading puts a moraine ridge with the talus,
+which is the class. The run prints it and does not apply it. Where the map has
+called the debris moss, a ridge in the valley as much as a slope above the
+treeline, the domain is `--within bare,moss`.
+
+kNN is the other way, and only once the polygons exist: `--labels
+lcfm,train.gpkg --method knn` with `bare_rock` and `scree` drawn in the file.
+The map's `bare` is then not taught. It is the union of the two, and teaching
+it would drown the polygons, the failure `s2veg.py` already describes for a
+dozen hand-drawn wood polygons. Prediction stays inside the map's bare, plus
+the polygons themselves, so the forest is not relabelled. Wood, moss, grass and
+water stay in the sample, so a pixel that is neither surface has somewhere else
+to go.
+
+**Scree from the map.** By default (`--scree map`) only `bare_rock` is taken
+from the classifier, kNN, a saved `--model` or the named k-means clusters
+alike. Scree is everything the global map in `--labels` calls `bare` that the
+classifier did not call `bare_rock`: the map draws the outline of the bare
+ground well and knows nothing of bedrock, the classifier the other way round.
+Scree the classifier finds outside the map's bare is dropped - a moraine the
+map called moss goes with it - and whatever else it put inside the outline
+becomes scree. `--scree model` keeps the classifier's own scree.
+
+The working grid is 10 m and the texture window is 3 pixels, 30 m. At 20 m that
+window is 60–100 m and swallows a cliff, only a few pixels wide, into the debris
+or vegetation beside it. A moraine ridge is wide enough at either resolution;
+the cliff is what sets the scale. `--smooth` defaults
+to 3 rather than 5, and `--min-area` to 0.1 ha: a rock band narrower than that
+survives in `--raster` and dies as a polygon. The polygons are tagged
+`natural=bare_rock` and `natural=scree`.
+
+Same caveat, sharper, because a cliff is a thin object and the distance is
+easily spent on shade: a drafting aid. Name the clusters, look at the raster,
+then correct it by hand.
 
 westra2osm.py
 -------------

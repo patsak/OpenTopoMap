@@ -14,7 +14,7 @@ back polygons.
     2. warp    to the UTM zone of the bbox centre, so a hectare is a hectare
     3. reclass their legend to wood / scrub / grass / moss / bare / water / wetland
     4. clean   majority filter (--smooth), then sieve out what is under --min-area
-    5. polygonize, simplify, write GPKG/GeoJSON/Shapefile in EPSG:4326
+    5. polygonize, simplify the shared edges, write GPKG/GeoJSON/Shapefile in EPSG:4326
 
 Two sources, both open, both 10 m (see veglib.py for the legends):
 
@@ -103,7 +103,8 @@ def parse_args(argv=None):
     parser.add_argument("--min-area", type=float, default=1.0, metavar="HA",
                         help="drop polygons smaller than this (default: 1.0)")
     parser.add_argument("--simplify", type=float, default=-1.0, metavar="D",
-                        help="Douglas-Peucker tolerance in metres, -1 is 1.5 cells (default: -1)")
+                        help="simplification tolerance in metres, applied to shared edges so "
+                             "neighbours stay gap-free; -1 is 1.5 cells (default: -1)")
     parser.add_argument("--chunk", type=int, default=4000, metavar="PX",
                         help="tile server requests are cut into chunks this big (default: 4000)")
     parser.add_argument("--timeout", type=int, default=300, metavar="S",
