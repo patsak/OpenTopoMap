@@ -90,6 +90,11 @@ and have no ice/slope flags, so they stay brown everywhere.
 **water-lines-intermittent** — line-dasharray cannot be data-driven, so
 intermittent water needs its own layer.
 
+**earth-bank** — natural=earth_bank: the cliff symbol in relief brown, the
+Genshtab sign for a bank of soil as opposed to a rock face, and the Garmin
+0x38 type. A closed earth bank (round a pit or a mound) stays in
+natural_lines, so its teeth keep to the lower side the way's direction marks.
+
 ### Roads and trails
 
 Genshtab colours with a black casing on every driveable road; trails and

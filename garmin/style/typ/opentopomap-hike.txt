@@ -2667,6 +2667,19 @@ Xpm="32 3 2 1"
 [end]
 
 [_line]
+Type=0x38
+String=0x02,Erdabbruch
+String=0x04,earth bank
+UseOrientation=Y
+Xpm="32 3 2 1"
+"  c none"
+"# c #8B4518"
+"  ###     ###     ###     ###   "
+"  ###     ###     ###     ###   "
+"################################"
+[end]
+
+[_line]
 Type=0x34
 String=0x02,Gletscherspalte
 String=0x04,crevasse

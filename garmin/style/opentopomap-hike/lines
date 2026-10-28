@@ -220,6 +220,7 @@ boundary=national [0x1e resolution 17]
 boundary=political [0x1c resolution 19]
 
 natural=cliff [0x31 resolution 21]
+natural=earth_bank [0x38 resolution 21]
 natural=gorge & is_closed()=false [0x37 resolution 21]
 natural=gorge & is_closed()=true [0x31 resolution 21]
 # Crevasse ticks are drawn perpendicular to the host glacier's direction tag;

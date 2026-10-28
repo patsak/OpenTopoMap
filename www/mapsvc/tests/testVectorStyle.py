@@ -148,6 +148,41 @@ class TestGorgeLines(unittest.TestCase):
         self.assertEqual(gorge.count('"                                "'), 9)
 
 
+class TestEarthBankLines(unittest.TestCase):
+    """natural=earth_bank is the cliff symbol in relief brown, on both maps."""
+
+    BROWN = "#8B4518"
+
+    def setUp(self):
+        self.layers = {layer["id"]: layer for layer in styleLayers()}
+        self.lua = PROCESS_LUA.read_text(encoding="utf-8")
+
+    def testEarthBanksReachTheLineTile(self):
+        natural_values = self.lua.split('local natural_values = Set {', 1)[1].split("}", 1)[0]
+        self.assertIn('"earth_bank"', natural_values)
+        self.assertIn('if poly_or_line and natural ~= "earth_bank" then', self.lua)
+
+    def testEarthBankIsABrownLineWithTeethOnTheLowerSide(self):
+        for layer_id in ("earth-bank", "earth-bank-teeth"):
+            layer = self.layers[layer_id]
+            self.assertEqual(layer["source-layer"], "natural_lines")
+            self.assertEqual(layer["filter"], ["==", "type", "earth_bank"])
+            self.assertEqual(layer["paint"]["line-color"], self.BROWN)
+        self.assertGreater(self.layers["earth-bank-teeth"]["paint"]["line-offset"][-1], 0)
+        self.assertEqual(
+            self.layers["earth-bank-teeth"]["paint"]["line-offset"],
+            self.layers["cliff-teeth"]["paint"]["line-offset"],
+        )
+
+    def testGarminDrawsEarthBanksWithTheirOwnBrownType(self):
+        lines = (REPO / "garmin/style/opentopomap-hike/lines").read_text(encoding="utf-8")
+        self.assertIn("natural=earth_bank [0x38 resolution 21]", lines)
+        typ = (REPO / "garmin/style/typ/opentopomap-hike.txt").read_text(encoding="utf-8")
+        bank = typ.split("[_line]\nType=0x38\n", 1)[1].split("[end]", 1)[0]
+        self.assertIn(f'"# c {self.BROWN}"', bank)
+        self.assertIn("UseOrientation=Y", bank)
+
+
 class TestPeakAndSaddleLabels(unittest.TestCase):
     def setUp(self):
         self.layers = {layer["id"]: layer for layer in styleLayers()}

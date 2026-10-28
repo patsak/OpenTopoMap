@@ -991,6 +991,79 @@
     }
   },
   {
+    "id": "earth-bank",
+    "source": "opentopomap-vector",
+    "source-layer": "natural_lines",
+    "minzoom": 12,
+    "filter": [
+      "==",
+      "type",
+      "earth_bank"
+    ],
+    "type": "line",
+    "paint": {
+      "line-color": "#8B4518",
+      "line-width": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "zoom"
+        ],
+        12,
+        0.5,
+        17,
+        1.2
+      ]
+    }
+  },
+  {
+    "id": "earth-bank-teeth",
+    "source": "opentopomap-vector",
+    "source-layer": "natural_lines",
+    "minzoom": 13,
+    "filter": [
+      "==",
+      "type",
+      "earth_bank"
+    ],
+    "type": "line",
+    "paint": {
+      "line-color": "#8B4518",
+      "line-width": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "zoom"
+        ],
+        13,
+        1.2,
+        17,
+        3
+      ],
+      "line-offset": [
+        "interpolate",
+        [
+          "linear"
+        ],
+        [
+          "zoom"
+        ],
+        13,
+        0.8,
+        17,
+        2
+      ],
+      "line-dasharray": [
+        1,
+        2
+      ]
+    }
+  },
+  {
     "id": "gorge-wall-left",
     "source": "opentopomap-vector",
     "source-layer": "natural_lines",

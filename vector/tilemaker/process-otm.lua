@@ -1178,7 +1178,8 @@ function process_natural(poly_or_line)
 	-- hike: ridge/arete carry the relief crest line that the hypsometric tint alone
 	-- cannot show; they are the only members of this layer drawn below z12.
 	-- Gorge reaches the natural line layer to use the same rock-face symbol as cliff.
-	local natural_values = Set { "cliff", "crevasse", "ridge", "arete", "gorge" }
+	-- Earth bank is the same symbol in relief brown, the Genshtab sign for a bank of soil.
+	local natural_values = Set { "cliff", "crevasse", "ridge", "arete", "gorge", "earth_bank" }
 	local man_made_values = Set { "embankment", "dyke", "breakwater", "pier", "groyne" }
 	local barrier_values = Set { "ditch", "city_wall" }
 	
@@ -1199,7 +1200,9 @@ function process_natural(poly_or_line)
 		return false
 	end
 	
-	if poly_or_line then
+	-- hike: a closed earth bank rings a pit or a mound rather than covering an area;
+	-- kept as a line, its teeth stay on the lower side the way's direction marks.
+	if poly_or_line and natural ~= "earth_bank" then
 		Layer("natural_polygons", true)
 	else
 		Layer("natural_lines", false)
