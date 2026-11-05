@@ -12,14 +12,15 @@
 # it links against exactly the libraries that are there.
 FROM debian:12-slim AS gol
 
-ARG GOL_VERSION=2.3.8
+ARG GOL_VERSION=2.5.3
 # gol's CMakeLists fetches libgeodesk from its main branch and cpp-httplib
 # without a tag, so each is pinned here and handed to CMake as an already
-# fetched source: libgeodesk at its last commit before the gol 2.3.8 release,
-# cpp-httplib at a release from before it. zlib and gtl, which CMake still
+# fetched source: libgeodesk at its last commit before the gol 2.5.3 release,
+# cpp-httplib at a release from before it. 2.5 is the first with `gol update`
+# (otmlib.gol.update). zlib and gtl, which CMake still
 # fetches, are pinned to a release upstream.
-ARG LIBGEODESK_COMMIT=52013b4737469ff8d206d517ae506ac579d300f6
-ARG CPPHTTPLIB_TAG=v0.57.1
+ARG LIBGEODESK_COMMIT=7b3465b0fc9af10337299bf1a0dbcaa444d07173
+ARG CPPHTTPLIB_TAG=v0.63.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \

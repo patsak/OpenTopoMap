@@ -1,6 +1,7 @@
 """otmlib.gol: several regions becoming the one GOL the service answers from."""
 
 import errno
+import gzip
 import os
 import shutil
 import subprocess
@@ -21,6 +22,12 @@ from overpass import evaluator
 from overpass.library import Library
 from overpass.parser import parse
 from overpass.tests.golaide import GolTestCase, fixture_pbf, neighbour_pbf
+
+
+def to_osc(xml: str, osc: Path) -> Path:
+    with gzip.open(osc, "wt", encoding="utf-8") as f:
+        f.write(f'<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6">{xml}</osmChange>')
+    return osc
 
 
 def to_pbf(xml: str, pbf: Path) -> Path:
@@ -181,3 +188,88 @@ class TestIsCurrent(GolCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Node 22 is where the two extracts meet: both carry it, and both diffs move it.
+BORDER_MOVE = (
+    '<modify><node id="22" version="2" timestamp="2026-10-01T10:00:00Z" lat="50.0250000" lon="10.0300000"/>'
+    "</modify>"
+)
+
+
+class TestUpdate(GolCase):
+    def setUp(self):
+        super().setUp()
+        self.target = self.tmp / "gol" / "both.gol"
+        names = {self.town.name: 1, self.east.name: 1}
+        gol.build([self.town, self.east], self.target, sequences=names)
+        self.town_osc = to_osc(
+            '<modify><node id="1" version="2" timestamp="2026-10-01T12:00:00Z" lat="50.0100000" lon="10.0100000">'
+            '<tag k="amenity" v="pub"/><tag k="name" v="The Crown"/></node></modify>' + BORDER_MOVE,
+            self.tmp / "town-2.osc.gz",
+        )
+        self.east_osc = to_osc(
+            '<create><node id="9" version="1" timestamp="2026-10-02T12:00:00Z" lat="50.0200000" lon="10.0900000">'
+            '<tag k="amenity" v="pub"/><tag k="name" v="New Inn"/></node></create>'
+            '<delete><node id="6" version="2" timestamp="2026-10-02T13:00:00Z" lat="50.0200000" lon="10.0800000"/>'
+            "</delete>" + BORDER_MOVE,
+            self.tmp / "east-2.osc.gz",
+        )
+        self.changes = {self.town.name: (2, [self.town_osc]), self.east.name: (2, [self.east_osc])}
+
+    def testTheDiffsAreInTheGol(self):
+        gol.update(self.target, self.changes)
+        self.assertEqual(self.found(self.target, "node[amenity=pub];out;"), ["node/1", "node/9"])
+        features = Features(str(self.target))
+        self.assertEqual(features.node(1)["name"], "The Crown")
+        nodes = list(features.way(200).nodes)
+        self.assertEqual([n.id for n in nodes], [20, 21, 22])
+        self.assertAlmostEqual(nodes[2].lat, 50.025, places=6)
+
+    def testItIsTheGolABuildFromThePatchedExtractsGives(self):
+        gol.update(self.target, self.changes)
+        patched = []
+        for pbf, osc in ((self.town, self.town_osc), (self.east, self.east_osc)):
+            out = self.tmp / f"patched-{pbf.name}"
+            subprocess.run(
+                ["osmium", "apply-changes", str(pbf), str(osc), "-o", str(out)], check=True, capture_output=True
+            )
+            patched.append(out)
+        rebuilt = self.tmp / "gol" / "rebuilt.gol"
+        gol.build(patched, rebuilt)
+        for query in ("node[amenity];out;", "way[highway];>;out;", "way(200);>;way(bn);out;", "node(50,10,51,11);out;"):
+            with self.subTest(query):
+                self.assertEqual(self.found(self.target, query), self.found(rebuilt, query))
+
+    def testTheStateMovesOn(self):
+        built = gol.read_state(self.target).built
+        gol.update(self.target, self.changes, sources=["new"])
+        state = gol.read_state(self.target)
+        self.assertEqual(state.sequences, {self.town.name: 2, self.east.name: 2})
+        # The oldest of the regions' newest edits: the town's diff, 2026-10-01.
+        self.assertEqual(Library(self.target).timestamp(), "2026-10-01T12:00:00Z")
+        self.assertEqual((state.built, state.sources), (built, ["new"]))
+
+    def testAnExtractWithoutDiffsKeepsItsSequence(self):
+        gol.update(self.target, {self.town.name: (2, [self.town_osc])})
+        self.assertEqual(gol.read_state(self.target).sequences, {self.town.name: 2, self.east.name: 1})
+
+    def testTheServiceHoldingTheGolOpenDoesNotStopIt(self):
+        # gol locks a GOL it updates against readers; the copy it updates has
+        # none. (The reader keeps the old GOL - overpass.library.)
+        reader = Features(str(self.target))
+        self.assertEqual(len(list(reader("n[amenity=pub]"))), 2)
+        gol.update(self.target, self.changes)
+        self.assertEqual(gol.read_state(self.target).sequences[self.town.name], 2)
+        check = subprocess.run(
+            [gol.gol_binary(), "query", str(self.target), "n[amenity=pub][name='The Crown']", "-f", "count"],
+            check=True, capture_output=True, text=True,
+        )
+        self.assertEqual(check.stdout.strip(), "1")
+
+    def testNoScratchFilesAreLeftBehind(self):
+        work = self.tmp / "work"
+        with mock.patch.dict(os.environ, {"OTM_GOL_WORK_DIR": str(work)}):
+            gol.update(self.target, self.changes)
+        self.assertEqual(list(work.iterdir()), [])
+        self.assertEqual(sorted(p.name for p in self.target.parent.iterdir()), ["both.gol", "both.gol.state.txt"])

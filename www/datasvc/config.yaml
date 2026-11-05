@@ -29,6 +29,12 @@ regions:
 # extracts changed (datasvc.job.build_gol). false skips the step.
 gol: true
 
+# Between builds the GOL follows the extracts by `gol update`, with the same
+# diffs the sync applied - seconds instead of the half hour a build takes. It
+# is rebuilt from the extracts anyway on the first change this many days after
+# its last build, and whenever the regions above change.
+gol_rebuild_days: 7
+
 # Build the hiking router's graphs (www/routing/config.yaml) after the GOL:
 # the tiles whose OSM data, DEM or parameters changed, then the graphs those
 # tiles make up - most nights a checksum per tile and nothing else (see

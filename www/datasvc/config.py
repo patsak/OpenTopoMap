@@ -35,6 +35,10 @@ class Config:
     # Merge all the regions into one GOL after each sync (data/gol/regions.gol,
     # read by www/overpass). Off unless the config asks for it.
     gol: bool = False
+    # How many days a GOL is kept current by ``gol update`` before the next
+    # change rebuilds it from the extracts - the safety net for what updates
+    # get wrong (see otmlib.gol).
+    gol_rebuild_days: int = 7
     # Build the hiking router's graphs after the sync and the GOL (www/routing,
     # its own config.yaml). Off unless the config asks for it.
     routing: bool = False
@@ -81,4 +85,14 @@ def load(path: Path | None = None) -> Config:
         if not isinstance(flags[key], bool):
             raise ValueError(f"{source}: {key} must be true or false, not {flags[key]!r}")
 
-    return Config(data_dir=data_dir, regions=regions, geofabrik_mirror=geofabrik_mirror, **flags)
+    rebuild_days = raw.get("gol_rebuild_days", 7)
+    if isinstance(rebuild_days, bool) or not isinstance(rebuild_days, int) or rebuild_days < 1:
+        raise ValueError(f"{source}: gol_rebuild_days must be a whole number of days, not {rebuild_days!r}")
+
+    return Config(
+        data_dir=data_dir,
+        regions=regions,
+        geofabrik_mirror=geofabrik_mirror,
+        gol_rebuild_days=rebuild_days,
+        **flags,
+    )
