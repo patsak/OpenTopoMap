@@ -3,10 +3,13 @@
 import json
 import os
 import shutil
+import signal
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 import pytest
@@ -15,6 +18,7 @@ import pytest
 pytest.importorskip("geodesk")
 
 from overpass.library import Library, LibraryUnavailable
+from overpass import server
 from overpass.server import create_app
 from overpass.tests.golaide import GolTestCase, gol_without_waynode_ids
 
@@ -176,15 +180,38 @@ class TestLibrary(GolTestCase):
         shutil.copyfile(self.gol, target)
         self.assertEqual(client.post("/api/interpreter", data={"data": "node(1);out;"}).status_code, 200)
 
-    def testReplacedGolIsReopened(self):
+    def testReplacedGolIsReportedOnceAndTheOldOneServedMeanwhile(self):
+        # geodesk keeps the store it opened for the life of the process, so a
+        # replaced GOL cannot be opened again here: the worker is recycled.
         target = self.work / "swap.gol"
         shutil.copyfile(self.gol, target)
-        library = Library(target)
+        replaced = []
+        library = Library(target, on_replaced=replaced.append)
         first = library.features()
         tmp = self.work / "swap.gol.new"
         shutil.copyfile(self.gol, tmp)
         os.replace(tmp, target)
-        self.assertIsNot(library.features(), first)
+        self.assertIs(library.features(), first)
+        self.assertIs(library.features(), first)
+        self.assertEqual(replaced, [target])
+
+    def testUnderGunicornAReplacedGolEndsTheWorker(self):
+        with (
+            mock.patch.dict(sys.modules, {"gunicorn": mock.Mock()}),
+            mock.patch("overpass.server.os.kill") as kill,
+        ):
+            server._recycle_worker(Path("x.gol"))
+        kill.assert_called_once_with(os.getpid(), signal.SIGTERM)
+
+    def testOutsideGunicornItOnlySaysSo(self):
+        with (
+            mock.patch.dict(sys.modules),
+            mock.patch("overpass.server.os.kill") as kill,
+            self.assertLogs("overpass", "WARNING"),
+        ):
+            sys.modules.pop("gunicorn", None)
+            server._recycle_worker(Path("x.gol"))
+        kill.assert_not_called()
 
     def testGolWithoutWaynodeIdsIsRefused(self):
         with self.assertRaises(LibraryUnavailable) as ctx:

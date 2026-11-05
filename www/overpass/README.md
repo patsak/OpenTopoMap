@@ -8,8 +8,10 @@ every region of `datasvc/config.yaml`, whichever they are, merged into one file.
 
 ```
 datasvc-job (02:00):  Geofabrik diffs ──► region PBFs
-                      then, if they changed:
-                      osmium merge | osmium time-filter | gol build -w ──► data/gol/regions.gol
+                      then, if they moved:
+                      the same diffs | osmium merge-changes -s | gol update ──► data/gol/regions.gol
+                      (or, weekly and as a fallback, from scratch:
+                      osmium merge | osmium time-filter | gol build -w)
                                                                                 │ (mmap)
 POST /api/interpreter ──► parser ──► evaluator ──► output ──► JSON / XML / CSV
                           (QL→AST)   (sets of elements; GOQL + GeoDesk
@@ -45,17 +47,26 @@ curl -d '[out:json];node[amenity=pub](40.17,44.50,40.19,44.52);out 3;' \
 
 In the stack (`www/docker-compose.yml`) the service is `overpass`, behind
 nginx at `/api/`, answering from `data/gol/regions.gol` (mounted read-only). It
-answers 503 until that file exists, and picks up a rebuilt one on the next
-query, without a restart.
+answers 503 until that file exists, and follows a replaced one without a
+restart of the container: geodesk 2.3 keeps a GOL it has opened for the life of
+the process, under its path, so opening the path again would still answer from
+the old file. Instead a gunicorn worker that notices the swap answers that one
+query from the old GOL and exits, and gunicorn starts a fresh worker in its
+place (`overpass.library`, `overpass.server._recycle_worker`).
 
 The file is datasvc's: `gol: true` in `www/datasvc/config.yaml` makes the
-nightly job, once its sync is done, merge every configured region into
-`data/gol/regions.gol` (`datasvc.job.build_gol`, `otmlib.gol`). It rebuilds
-only when the extracts are not the ones the GOL was built from - their names,
-sizes and mtimes are recorded next to it - so a night with no diffs costs a
-few `stat()` calls, and a night whose build failed is made good by the next
-one. The stock config (the Russian federal districts, ~4 GB of PBF) takes
-about five minutes on a laptop. To build it now:
+nightly job, once its sync is done, bring `data/gol/regions.gol` up to every
+configured region (`datasvc.job.build_gol`, `otmlib.gol`). Next to the GOL it
+records the replication sequence it holds each extract at. A night that moved
+them is applied with `gol update` (gol 2.5+), from the same Geofabrik diffs
+the sync applied, merged by `osmium merge-changes -s` into one change file -
+seconds, against tens of minutes for a build. It is built from the extracts
+instead when there is none yet, the regions changed, an extract is more than
+60 diffs behind or went back (a fresh download), the update failed, or the last
+build is older than `gol_rebuild_days` (7). A night with no diffs costs a few
+`stat()` calls, and a night whose step failed is made good by the next one. A
+full build of the stock config (the Russian federal districts, ~4 GB of PBF)
+takes about five minutes on a laptop. To run the step now:
 
 ```bash
 docker compose run --rm datasvc-job python -m datasvc

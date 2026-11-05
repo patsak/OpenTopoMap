@@ -49,6 +49,16 @@ class TestLoad(ConfigCase):
         with self.assertRaises(ValueError):
             config.load(self.write("regions: [georgia]\ngol: russia\n"))
 
+    def testGolRebuildDaysDefaultsToAWeek(self):
+        self.assertEqual(config.load(self.write("regions: [georgia]\n")).gol_rebuild_days, 7)
+        self.assertEqual(config.load(self.write("regions: [georgia]\ngol_rebuild_days: 30\n")).gol_rebuild_days, 30)
+        for bad in ("0", "true", "weekly", "1.5"):
+            with self.subTest(bad), self.assertRaises(ValueError):
+                config.load(self.write(f"regions: [georgia]\ngol_rebuild_days: {bad}\n"))
+
+    def testTheShippedConfigLoads(self):
+        self.assertTrue(config.load(config.DEFAULT_CONFIG).gol)
+
     def testRoutingIsAFlagOffByDefault(self):
         self.assertFalse(config.load(self.write("regions: [georgia]\n")).routing)
         self.assertTrue(config.load(self.write("regions: [georgia]\nrouting: true\n")).routing)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,7 +45,7 @@ DEFAULT_MAX_ELEMENTS = 2_000_000
 
 def create_app(gol_path: str | None = None) -> Flask:
     app = Flask(__name__)
-    library = Library(gol_path or os.environ.get("OTM_OVERPASS_GOL", DEFAULT_GOL))
+    library = Library(gol_path or os.environ.get("OTM_OVERPASS_GOL", DEFAULT_GOL), on_replaced=_recycle_worker)
     max_timeout = int(os.environ.get("OTM_OVERPASS_MAX_TIMEOUT", MAX_TIMEOUT))
     max_elements = int(os.environ.get("OTM_OVERPASS_MAX_ELEMENTS", DEFAULT_MAX_ELEMENTS))
     app.config["OVERPASS_LIBRARY"] = library
@@ -113,6 +114,18 @@ def create_app(gol_path: str | None = None) -> Flask:
         return {"status": "ok", "osm_base": library.timestamp()}
 
     return app
+
+
+def _recycle_worker(path: Path) -> None:
+    """The GOL was replaced, and this process cannot open the new one (see
+    overpass.library): under gunicorn, end the worker gracefully - it finishes
+    the request in hand, from the old GOL, and gunicorn starts a fresh worker
+    in its place. Anywhere else, say so: only a restart helps."""
+    if "gunicorn" in sys.modules:
+        log.info("%s was replaced; recycling worker %d to open it", path, os.getpid())
+        os.kill(os.getpid(), signal.SIGTERM)
+    else:
+        log.warning("%s was replaced; restart the server to answer from it", path)
 
 
 def _query_text() -> str:

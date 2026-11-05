@@ -38,6 +38,12 @@ class SyncResult:
     sequence: int | None
     changed: bool
 
+def lock_path(region: Region, cache_dir: Path) -> Path:
+    """The lock a region's sync holds while it rewrites the PBF and moves its
+    sequence: hold it to read the two as one."""
+    return cache_dir / f"{region.region_id.replace('/', '_')}.sync.lock"
+
+
 def sync_region(region: Region, cache_dir: Path, log_fn: LogFn | None = None) -> SyncResult:
     """Bring *region*'s cached PBF up to Geofabrik's latest published sequence.
 
@@ -52,8 +58,7 @@ def sync_region(region: Region, cache_dir: Path, log_fn: LogFn | None = None) ->
     the same diffs to the same file at the same time.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    lock = cache_dir / f"{region.region_id.replace('/', '_')}.sync.lock"
-    with exclusive(lock):
+    with exclusive(lock_path(region, cache_dir)):
         return _sync_region(region, cache_dir, log_fn)
 
 
