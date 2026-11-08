@@ -89,7 +89,7 @@ has applied a diff.
 
 `gol` itself is compiled from source in the datasvc image (a build stage of
 `www/datasvc/Dockerfile`), native on amd64 and arm64. The released binary is
-x86_64 only, wants glibc 2.38 (newer than datasvc's bookworm), and under qemu
+x86_64 only, and under qemu
 on Apple Silicon it fails outright - it maps its output in one multi-gigabyte
 `mmap(MAP_SHARED)` that qemu-user refuses with ENOMEM. gol's build fetches
 libgeodesk from its main branch and cpp-httplib untagged; the Dockerfile pins

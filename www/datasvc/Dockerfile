@@ -7,10 +7,10 @@
 
 # GeoDesk's gol tool, for the job's GOL step (otmlib.gol, read by
 # www/overpass). Compiled here rather than taken from the release: the released
-# x86_64 binary wants glibc 2.38, newer than this base has, and fails under
-# qemu on Apple Silicon besides. Built on the same base as the image below, so
-# it links against exactly the libraries that are there.
-FROM debian:12-slim AS gol
+# binary is x86_64 only and fails under qemu on Apple Silicon. Built on the
+# same base as the image below, so it links against exactly the libraries that
+# are there.
+FROM debian:13-slim AS gol
 
 ARG GOL_VERSION=2.5.3
 # gol's CMakeLists fetches libgeodesk from its main branch and cpp-httplib
@@ -46,20 +46,22 @@ RUN cmake -S gol -B build \
     && ./build/gol --version
 
 
-FROM debian:12-slim
+FROM debian:13-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # The five tilemaker runtime libraries below are what its binary is dynamically
-# linked against; upstream builds it on debian:bookworm-slim, the same base as
-# this image, so the copied binary finds exactly these sonames. If a tilemaker
-# bump ever fails to start with a missing .so, run
+# linked against; upstream builds it on debian:trixie-slim (since
+# systemed/tilemaker#940; before that bookworm, which this image followed),
+# the same base as this image, so the copied binary finds exactly these
+# sonames. Upstream moving its base again shows up as a missing .so at the
+# `tilemaker --help` check at the end of this file; then run
 #   docker run --rm --entrypoint sh ghcr.io/systemed/tilemaker:master \
-#     -c "ldd /usr/src/app/tilemaker"
-# and add whatever it names.
+#     -c "cat /etc/debian_version; ldd /usr/src/app/tilemaker"
+# and follow it here.
 # grass-core, python3-gdal and python3-numpy are the routing graph build's:
-# r.watershed (GRASS 8.2 here - otmlib.grass handles it), the DEM reads, and
-# the numpy those GDAL bindings were built against.
+# r.watershed (GRASS 8.4 here), the DEM reads, and the numpy those GDAL
+# bindings were built against.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
@@ -72,15 +74,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         libpq5 \
-        libboost-filesystem1.74.0 \
-        libboost-program-options1.74.0 \
+        libboost-filesystem1.83.0 \
+        libboost-program-options1.83.0 \
         liblua5.1-0 \
-        libshp2 \
+        libshp4 \
         libsqlite3-0 \
-        libssl3 \
+        libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# gol, from the stage at the top; libssl3 above is what it links against
+# gol, from the stage at the top; libssl3t64 above is what it links against
 # besides libc and libstdc++.
 COPY --from=gol /src/build/gol /usr/local/bin/gol
 
