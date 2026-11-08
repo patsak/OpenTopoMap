@@ -218,7 +218,7 @@ routing/.venv/bin/python -m pytest -q routing/tests
 OTM_PORT=8093 routing/.venv/bin/python -m routing.server   # then open /route/
 ```
 
-The build needs GRASS 8.2+ for `r.watershed` (8.2 in the datasvc image, Debian 12). It falls back to a numpy priority-flood (`graph.hydrology: numpy`), which suits small areas and the tests.
+The build needs GRASS 8.2+ for `r.watershed` (8.4 in the datasvc image, Debian 13; `otmlib.grass` still handles 8.2). It falls back to a numpy priority-flood (`graph.hydrology: numpy`), which suits small areas and the tests.
 
 ## Limits worth knowing
 
